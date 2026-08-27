@@ -126,8 +126,8 @@ export const MovSerial = (() => {
     await new Promise(r => setTimeout(r, 200));
     rxBuffer = [];
     await writeBytes([0x01]); // Ctrl-A: raw REPLへ
-    await waitForBytes('raw REPL; CTRL-B to exit\r\n>');
-    rxBuffer = [];
+    const idx = await waitForBytes('raw REPL; CTRL-B to exit\r\n>');
+    consumeUpTo(idx); // プロンプトまでを消費。以降に届いているデータは保持する
   }
 
   async function exitRawRepl() {
@@ -141,8 +141,8 @@ export const MovSerial = (() => {
     await writeBytes(Array.from(new TextEncoder().encode(code)));
     await writeBytes([0x04]); // Ctrl-D: 実行
 
-    await waitForBytes('OK', timeoutMs); // 実行受理の合図
-    rxBuffer = [];
+    const okIdx = await waitForBytes('OK', timeoutMs); // 実行受理の合図
+    consumeUpTo(okIdx); // "OK"までを消費。直後に届いているstdoutの先頭は保持する
 
     const stdoutEnd = await waitForBytes('\x04', timeoutMs);
     const stdoutBytes = consumeUpTo(stdoutEnd).slice(0, -1); // 末尾の0x04を除く
