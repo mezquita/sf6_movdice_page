@@ -33,24 +33,21 @@
 <p><a href="./index.html">&larr; 接続実験ページに戻る</a></p>
 <h1>movdice 設定（画像プレビュー実験）</h1>
 <p id="buildVersion" style="font-size: 0.75rem; color: #888;"></p>
-<p>
-  接続中のESP32から <code>images.json</code> と画像を読み出し、プリセットごとに一覧表示する実験ページ。<br>
-  <strong>MicroPythonのRaw REPLを直接使う暫定実装</strong>で、本番の設定ツール用プロトコルとは別物。
-</p>
 
 <div id="status" class="status-none">未接続</div>
 
 <button id="connectBtn">ESP32に接続</button>
 <button id="forgetBtn" disabled>アクセスを取り消す</button>
-<button id="loadBtn" disabled>画像一覧を読み込む（Raw REPL版・暫定）</button>
-<button id="helloBtn" disabled>新プロトコルでhello（設定モードで実行してください）</button>
-<button id="loadNewBtn" disabled>新プロトコルで画像一覧を読み込む（設定モードで実行してください）</button>
-<button id="rebootBtn" disabled>設定を反映して再起動</button>
+<button id="helloBtn" disabled>hello（疎通確認、設定モードで実行してください）</button>
+<button id="loadNewBtn" disabled>画像一覧を読み込む（設定モードで実行してください）</button>
+<button id="saveBtn" disabled>設定を反映</button>
+<span id="saveStatus" style="color: #155724; font-weight: bold;"></span>
+<button id="rebootBtn" disabled>再起動</button>
 
 <div id="storageInfo"></div>
 
 <div id="uploadBox">
-  <strong>画像アップロード（新プロトコル）</strong><br>
+  <strong>画像アップロード</strong><br>
   <input type="file" id="uploadFile" accept="image/png" disabled>
   <input type="text" id="uploadFilename" placeholder="ファイル名（省略時は元ファイル名から自動生成）" disabled>
   <button id="uploadBtn" disabled>アップロード</button>

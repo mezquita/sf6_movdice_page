@@ -1,13 +1,14 @@
 import { MovSerial } from './serial.js';
-import { base64ToBytes, decodeRleToRgba, decodeRawToRgba, rgbaToDataUrl, pngFileToRgb565Rle } from './imageDecode.js';
+import { decodeRleToRgba, decodeRawToRgba, rgbaToDataUrl, pngFileToRgb565Rle } from './imageDecode.js';
 import { hello, listImages, getImage, getPresets, savePresets, uploadImage, deleteImage, getStorageInfo, testDisplay, reboot, } from './protocol.js';
 import { BUILD_VERSION } from './version.js';
 const statusEl = document.getElementById('status');
 const connectBtn = document.getElementById('connectBtn');
 const forgetBtn = document.getElementById('forgetBtn');
-const loadBtn = document.getElementById('loadBtn');
 const helloBtn = document.getElementById('helloBtn');
 const loadNewBtn = document.getElementById('loadNewBtn');
+const saveBtn = document.getElementById('saveBtn');
+const saveStatusEl = document.getElementById('saveStatus');
 const rebootBtn = document.getElementById('rebootBtn');
 const loadStatusEl = document.getElementById('loadStatus');
 const setsEl = document.getElementById('sets');
@@ -84,9 +85,9 @@ MovSerial.setDebugLogger(log);
 function refreshUi() {
     const connected = MovSerial.isConnected();
     forgetBtn.disabled = !connected;
-    loadBtn.disabled = !connected;
     helloBtn.disabled = !connected;
     loadNewBtn.disabled = !connected;
+    saveBtn.disabled = !connected;
     rebootBtn.disabled = !connected;
     uploadFileInput.disabled = !connected;
     uploadFilenameInput.disabled = !connected;
@@ -117,13 +118,13 @@ testUploadBtn.addEventListener('click', async () => {
     testUploadBtn.disabled = false;
 });
 rebootBtn.addEventListener('click', async () => {
-    if (!confirm('ESP32を再起動しますか？（設定モードを抜けて通常のスライドショーが始まります）'))
+    if (!confirm('ESP32を再起動しますか？（設定モードを抜けて通常のスライドショーが始まります。未保存の変更は失われます）'))
         return;
     rebootBtn.disabled = true;
     try {
         log('再起動コマンドを送信します。');
         await reboot();
-        log('再起動しました。設定モードを終了しています。再度設定するにはリセット後にPWR(BOOT)ボタンで入り直してください。');
+        log('再起動しました。再度設定するにはリセット後にPWR(BOOT)ボタンで入り直してください。');
     }
     catch (e) {
         log('再起動時にエラー（応答前に切断された可能性、実際には再起動できている場合があります）: ' + e.message);
@@ -133,7 +134,7 @@ rebootBtn.addEventListener('click', async () => {
 helloBtn.addEventListener('click', async () => {
     helloBtn.disabled = true;
     try {
-        log('新プロトコル: helloを送信します。');
+        log('helloを送信します。');
         const meta = await hello();
         log('hello応答: ' + JSON.stringify(meta));
     }
@@ -185,17 +186,11 @@ forgetBtn.addEventListener('click', async () => {
     setLoadStatus('');
     refreshUi();
 });
-// --- 画像読み込み ---
-async function fetchImagesJson() {
-    const jsonStr = await MovSerial.execRaw("print(open('images.json').read())");
-    log('images.json raw: ' + JSON.stringify(jsonStr));
-    return JSON.parse(jsonStr);
-}
-async function fetchRawFileBase64(filename) {
-    const safe = filename.replace(/'/g, '');
-    const code = `import binascii\nprint(binascii.b2a_base64(open('img/${safe}','rb').read()).decode())`;
-    return await MovSerial.execRaw(code);
-}
+// --- 画像読み込み・プリセット編集 ---
+// 変更(頻度・追加・削除・primary)はすべてローカルの currentImagesData を書き換えるだけに留め、
+// 実際にESP32へ書き込むのは「設定を反映」ボタン(saveBtn)を押した時だけ。
+let currentImagesData = null;
+let currentCache = new Map();
 function renderSets(imagesData, cache, callbacks = {}) {
     const { onRemoveFromSet, onSetPrimary, onFreqChange, onAddToSet } = callbacks;
     setsEl.innerHTML = '';
@@ -272,7 +267,9 @@ function renderSets(imagesData, cache, callbacks = {}) {
             const available = Array.from(cache.keys()).filter((f) => !(f in imagesData.sets[setName]));
             if (available.length > 0) {
                 const addRow = document.createElement('div');
-                addRow.style.cssText = 'margin-top:0.5rem; display:flex; align-items:center; gap:0.4rem;';
+                addRow.style.cssText = 'margin-top:0.5rem; display:flex; align-items:center; gap:0.4rem; font-size:0.85rem;';
+                const selectLabel = document.createElement('span');
+                selectLabel.textContent = '画像ファイル名：';
                 const select = document.createElement('select');
                 for (const f of available) {
                     const opt = document.createElement('option');
@@ -280,6 +277,8 @@ function renderSets(imagesData, cache, callbacks = {}) {
                     opt.textContent = f.replace(/\.raw$/, '');
                     select.appendChild(opt);
                 }
+                const freqLabel = document.createElement('span');
+                freqLabel.textContent = '頻度：';
                 const freqInput = document.createElement('input');
                 freqInput.type = 'number';
                 freqInput.min = '1';
@@ -297,7 +296,9 @@ function renderSets(imagesData, cache, callbacks = {}) {
                     }
                     onAddToSet(setName, select.value, value);
                 });
+                addRow.appendChild(selectLabel);
                 addRow.appendChild(select);
+                addRow.appendChild(freqLabel);
                 addRow.appendChild(freqInput);
                 addRow.appendChild(addBtn);
                 section.appendChild(addRow);
@@ -306,52 +307,20 @@ function renderSets(imagesData, cache, callbacks = {}) {
         setsEl.appendChild(section);
     }
 }
-loadBtn.addEventListener('click', async () => {
-    loadBtn.disabled = true;
-    try {
-        setLoadStatus('images.jsonを取得しています...');
-        log('Raw REPLに入ります。');
-        await MovSerial.enterRawRepl();
-        try {
-            const imagesData = await fetchImagesJson();
-            log('images.jsonを取得しました。');
-            const allFilenames = new Set();
-            for (const setName of Object.keys(imagesData.sets)) {
-                for (const filename of Object.keys(imagesData.sets[setName])) {
-                    allFilenames.add(filename);
-                }
-            }
-            const cache = new Map();
-            const total = allFilenames.size;
-            let done = 0;
-            for (const filename of allFilenames) {
-                setLoadStatus(`画像を取得中... (${done}/${total}) ${filename}`);
-                const b64 = await fetchRawFileBase64(filename);
-                const bytes = base64ToBytes(b64);
-                const rgba = imagesData.use_rle ? decodeRleToRgba(bytes) : decodeRawToRgba(bytes);
-                cache.set(filename, rgbaToDataUrl(rgba));
-                done++;
-                log(`${filename} 取得完了 (${bytes.length} bytes)`);
-            }
-            renderSets(imagesData, cache);
-            setLoadStatus(`完了（${total}枚）`);
-        }
-        finally {
-            await MovSerial.exitRawRepl();
-            log('Raw REPLを抜けました。');
-        }
-    }
-    catch (e) {
-        setLoadStatus('エラー: ' + e.message);
-        log('読み込み失敗: ' + e.message);
-    }
-    loadBtn.disabled = false;
-});
-let currentImagesData = null;
+function rerenderSetsLocal() {
+    if (!currentImagesData)
+        return;
+    renderSets(currentImagesData, currentCache, {
+        onRemoveFromSet: handleRemoveFromSet,
+        onSetPrimary: handleSetPrimary,
+        onFreqChange: handleFreqChange,
+        onAddToSet: handleAddToSet,
+    });
+}
 async function loadWithNewProtocol() {
     loadNewBtn.disabled = true;
     try {
-        setLoadStatus('新プロトコルでプリセットを取得しています...');
+        setLoadStatus('プリセットを取得しています...');
         const imagesData = await getPresets();
         log('プリセット取得完了: ' + JSON.stringify(imagesData));
         currentImagesData = imagesData;
@@ -368,13 +337,9 @@ async function loadWithNewProtocol() {
             done++;
             log(`${filename} 取得完了 (${bytes.length} bytes)`);
         }
-        renderSets(imagesData, cache, {
-            onRemoveFromSet: handleRemoveFromSet,
-            onSetPrimary: handleSetPrimary,
-            onFreqChange: handleFreqChange,
-            onAddToSet: handleAddToSet,
-        });
-        setLoadStatus(`完了（${total}枚、新プロトコル）`);
+        currentCache = cache;
+        rerenderSetsLocal();
+        setLoadStatus(`完了（${total}枚）`);
         await refreshStorageInfo();
     }
     catch (e) {
@@ -384,76 +349,60 @@ async function loadWithNewProtocol() {
     loadNewBtn.disabled = false;
 }
 // プレビュー画面の「このセットから外す」操作: プール(img/)の実ファイルには触れず、
-// そのセットの選択情報(images.jsonのsets)からキーを外して保存するだけ。
-async function handleRemoveFromSet(setName, filename) {
+// そのセットの選択情報(images.jsonのsets)からキーを外すだけ（ローカル編集、未保存）。
+function handleRemoveFromSet(setName, filename) {
     if (!currentImagesData)
         return;
-    try {
-        delete currentImagesData.sets[setName][filename];
-        const result = await savePresets(currentImagesData);
-        log(`「${setName}」から ${filename} を外しました。`);
-        if (result.warning) {
-            log('警告: ' + result.warning);
-        }
-        await loadWithNewProtocol();
-    }
-    catch (e) {
-        log('保存失敗: ' + e.message);
-    }
+    delete currentImagesData.sets[setName][filename];
+    log(`「${setName}」から ${filename} を外しました（未保存。「設定を反映」で書き込まれます）。`);
+    rerenderSetsLocal();
 }
-// 起動時に最初に表示するセットを切り替える
-async function handleSetPrimary(setName) {
+// 起動時に最初に表示するセットを切り替える（ローカル編集、未保存）
+function handleSetPrimary(setName) {
     if (!currentImagesData)
         return;
-    if (!confirm(`「${setName}」をprimary（起動時に最初に表示するセット）にしますか？`))
-        return;
-    try {
-        currentImagesData.primary = setName;
-        const result = await savePresets(currentImagesData);
-        log(`primaryを「${setName}」に変更しました。`);
-        if (result.warning) {
-            log('警告: ' + result.warning);
-        }
-        await loadWithNewProtocol();
-    }
-    catch (e) {
-        log('保存失敗: ' + e.message);
-    }
+    currentImagesData.primary = setName;
+    log(`primaryを「${setName}」に変更しました（未保存。「設定を反映」で書き込まれます）。`);
+    rerenderSetsLocal();
 }
-// 既存の画像の表示頻度を変更する（画像自体は変わらないので全体再読み込みはせず即時保存だけ行う）
-async function handleFreqChange(setName, filename, value) {
+// 既存の画像の表示頻度を変更する（ローカル編集、未保存）
+function handleFreqChange(setName, filename, value) {
     if (!currentImagesData)
         return;
-    try {
-        currentImagesData.sets[setName][filename] = value;
-        const result = await savePresets(currentImagesData);
-        log(`「${setName}」の${filename}の頻度を${value}に変更しました。`);
-        if (result.warning) {
-            log('警告: ' + result.warning);
-        }
-    }
-    catch (e) {
-        log('保存失敗: ' + e.message);
-    }
+    currentImagesData.sets[setName][filename] = value;
+    log(`「${setName}」の${filename}の頻度を${value}に変更しました（未保存。「設定を反映」で書き込まれます）。`);
 }
-// プールにある画像を、指定した頻度でこのセットに新たに追加する
-async function handleAddToSet(setName, filename, freq) {
+// プールにある画像を、指定した頻度でこのセットに新たに追加する（ローカル編集、未保存）
+function handleAddToSet(setName, filename, freq) {
     if (!currentImagesData)
         return;
-    try {
-        currentImagesData.sets[setName][filename] = freq;
-        const result = await savePresets(currentImagesData);
-        log(`「${setName}」に ${filename}（頻度${freq}）を追加しました。`);
-        if (result.warning) {
-            log('警告: ' + result.warning);
-        }
-        await loadWithNewProtocol();
-    }
-    catch (e) {
-        log('保存失敗: ' + e.message);
-    }
+    currentImagesData.sets[setName][filename] = freq;
+    log(`「${setName}」に ${filename}（頻度${freq}）を追加しました（未保存。「設定を反映」で書き込まれます）。`);
+    rerenderSetsLocal();
 }
 loadNewBtn.addEventListener('click', loadWithNewProtocol);
+saveBtn.addEventListener('click', async () => {
+    if (!currentImagesData) {
+        log('先に画像一覧を読み込んでください。');
+        return;
+    }
+    saveBtn.disabled = true;
+    try {
+        const result = await savePresets(currentImagesData);
+        log('設定を反映しました。');
+        if (result.warning) {
+            log('警告: ' + result.warning);
+        }
+        saveStatusEl.textContent = '保存されました';
+        setTimeout(() => {
+            saveStatusEl.textContent = '';
+        }, 2000);
+    }
+    catch (e) {
+        log('保存失敗: ' + e.message);
+    }
+    saveBtn.disabled = false;
+});
 uploadBtn.addEventListener('click', async () => {
     const file = uploadFileInput.files?.[0];
     if (!file) {
