@@ -9,6 +9,15 @@ export const MovSerial = (() => {
   let reader = null;
   let readLoopPromise = null;
   let rxBuffer = [];
+  let debugLog = null;
+
+  function setDebugLogger(fn) {
+    debugLog = fn;
+  }
+
+  function dlog(msg) {
+    if (debugLog) debugLog('[serial.js] ' + msg);
+  }
 
   function isSupported() {
     return 'serial' in navigator;
@@ -124,9 +133,11 @@ export const MovSerial = (() => {
     rxBuffer = [];
     await writeBytes([0x03, 0x03]); // Ctrl-C x2: 実行中の処理を止める
     await new Promise(r => setTimeout(r, 200));
+    dlog('Ctrl-C後・破棄前のバッファ: ' + JSON.stringify(bytesToString(rxBuffer)));
     rxBuffer = [];
     await writeBytes([0x01]); // Ctrl-A: raw REPLへ
     const idx = await waitForBytes('raw REPL; CTRL-B to exit\r\n>');
+    dlog('raw REPLプロンプト検出idx=' + idx + ' 残り: ' + JSON.stringify(bytesToString(rxBuffer.slice(idx))));
     consumeUpTo(idx); // プロンプトまでを消費。以降に届いているデータは保持する
   }
 
@@ -142,7 +153,9 @@ export const MovSerial = (() => {
     await writeBytes([0x04]); // Ctrl-D: 実行
 
     const okIdx = await waitForBytes('OK', timeoutMs); // 実行受理の合図
+    dlog('OK検出idx=' + okIdx + ' consume前バッファ全体: ' + JSON.stringify(bytesToString(rxBuffer)));
     consumeUpTo(okIdx); // "OK"までを消費。直後に届いているstdoutの先頭は保持する
+    dlog('OK消費後の残り: ' + JSON.stringify(bytesToString(rxBuffer)));
 
     const stdoutEnd = await waitForBytes('\x04', timeoutMs);
     const stdoutBytes = consumeUpTo(stdoutEnd).slice(0, -1); // 末尾の0x04を除く
@@ -167,5 +180,6 @@ export const MovSerial = (() => {
     enterRawRepl,
     exitRawRepl,
     execRaw,
+    setDebugLogger,
   };
 })();

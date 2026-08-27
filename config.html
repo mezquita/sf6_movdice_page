@@ -69,6 +69,8 @@ function setLoadStatus(text) {
   loadStatusEl.textContent = text;
 }
 
+MovSerial.setDebugLogger(log);
+
 function refreshUi() {
   const connected = MovSerial.isConnected();
   forgetBtn.disabled = !connected;
