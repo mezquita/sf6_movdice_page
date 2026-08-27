@@ -69,6 +69,14 @@ export async function uploadImage(filename, data) {
 export async function deleteImage(filename) {
     await sendCommand('delete_image', { filename });
 }
+export async function testDisplay(filename) {
+    await sendCommand('test_display', { filename });
+}
+export async function reboot() {
+    // ESP32側は応答を返した直後にmachine.reset()するため、応答を受け取れば十分。
+    // 再起動によりUSBが再列挙されポートが切断されるが、それ自体はエラーとして扱わない。
+    await sendCommand('reboot');
+}
 export async function getStorageInfo() {
     const res = await sendCommand('get_storage_info');
     return {

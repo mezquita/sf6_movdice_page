@@ -99,6 +99,16 @@ export async function deleteImage(filename: string): Promise<void> {
   await sendCommand('delete_image', { filename });
 }
 
+export async function testDisplay(filename: string): Promise<void> {
+  await sendCommand('test_display', { filename });
+}
+
+export async function reboot(): Promise<void> {
+  // ESP32側は応答を返した直後にmachine.reset()するため、応答を受け取れば十分。
+  // 再起動によりUSBが再列挙されポートが切断されるが、それ自体はエラーとして扱わない。
+  await sendCommand('reboot');
+}
+
 export interface StorageInfo {
   freeBytes: number;
   imagesUsedBytes: number;

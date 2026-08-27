@@ -1,6 +1,6 @@
 import { MovSerial } from './serial.js';
 import { base64ToBytes, decodeRleToRgba, decodeRawToRgba, rgbaToDataUrl, pngFileToRgb565Rle } from './imageDecode.js';
-import { hello, listImages, getImage, getPresets, savePresets, uploadImage, deleteImage, getStorageInfo } from './protocol.js';
+import { hello, listImages, getImage, getPresets, savePresets, uploadImage, deleteImage, getStorageInfo, testDisplay, reboot, } from './protocol.js';
 import { BUILD_VERSION } from './version.js';
 const statusEl = document.getElementById('status');
 const connectBtn = document.getElementById('connectBtn');
@@ -8,6 +8,7 @@ const forgetBtn = document.getElementById('forgetBtn');
 const loadBtn = document.getElementById('loadBtn');
 const helloBtn = document.getElementById('helloBtn');
 const loadNewBtn = document.getElementById('loadNewBtn');
+const rebootBtn = document.getElementById('rebootBtn');
 const loadStatusEl = document.getElementById('loadStatus');
 const setsEl = document.getElementById('sets');
 const logEl = document.getElementById('log');
@@ -86,6 +87,7 @@ function refreshUi() {
     loadBtn.disabled = !connected;
     helloBtn.disabled = !connected;
     loadNewBtn.disabled = !connected;
+    rebootBtn.disabled = !connected;
     uploadFileInput.disabled = !connected;
     uploadFilenameInput.disabled = !connected;
     uploadBtn.disabled = !connected;
@@ -113,6 +115,20 @@ testUploadBtn.addEventListener('click', async () => {
         log(`テスト送信失敗 (${size} bytes): ` + e.message);
     }
     testUploadBtn.disabled = false;
+});
+rebootBtn.addEventListener('click', async () => {
+    if (!confirm('ESP32を再起動しますか？（設定モードを抜けて通常のスライドショーが始まります）'))
+        return;
+    rebootBtn.disabled = true;
+    try {
+        log('再起動コマンドを送信します。');
+        await reboot();
+        log('再起動しました。設定モードを終了しています。再度設定するにはリセット後にPWR(BOOT)ボタンで入り直してください。');
+    }
+    catch (e) {
+        log('再起動時にエラー（応答前に切断された可能性、実際には再起動できている場合があります）: ' + e.message);
+    }
+    rebootBtn.disabled = false;
 });
 helloBtn.addEventListener('click', async () => {
     helloBtn.disabled = true;
@@ -180,7 +196,8 @@ async function fetchRawFileBase64(filename) {
     const code = `import binascii\nprint(binascii.b2a_base64(open('img/${safe}','rb').read()).decode())`;
     return await MovSerial.execRaw(code);
 }
-function renderSets(imagesData, cache, onRemoveFromSet, onSetPrimary) {
+function renderSets(imagesData, cache, callbacks = {}) {
+    const { onRemoveFromSet, onSetPrimary, onFreqChange, onAddToSet } = callbacks;
     setsEl.innerHTML = '';
     for (const setName of Object.keys(imagesData.sets)) {
         const section = document.createElement('div');
@@ -188,10 +205,7 @@ function renderSets(imagesData, cache, onRemoveFromSet, onSetPrimary) {
         const heading = document.createElement('h3');
         const isPrimary = setName === imagesData.primary;
         heading.textContent = setName + (isPrimary ? '（primary） ' : ' ');
-        if (isPrimary) {
-            // 見出しテキストのみで表現済み。ボタンは出さない。
-        }
-        else if (onSetPrimary) {
+        if (!isPrimary && onSetPrimary) {
             const primaryBtn = document.createElement('button');
             primaryBtn.textContent = 'primaryにする';
             primaryBtn.style.fontSize = '0.7rem';
@@ -213,6 +227,37 @@ function renderSets(imagesData, cache, onRemoveFromSet, onSetPrimary) {
             caption.textContent = filename.replace(/\.raw$/, '');
             wrap.appendChild(img);
             wrap.appendChild(caption);
+            const freq = imagesData.sets[setName][filename];
+            if (onFreqChange) {
+                const freqRow = document.createElement('div');
+                freqRow.style.cssText = 'display:flex; align-items:center; justify-content:center; gap:0.2rem; font-size:0.75rem; margin-top:0.2rem;';
+                const freqLabel = document.createElement('span');
+                freqLabel.textContent = '頻度:';
+                const freqInput = document.createElement('input');
+                freqInput.type = 'number';
+                freqInput.min = '1';
+                freqInput.step = '1';
+                freqInput.value = String(freq);
+                freqInput.style.width = '48px';
+                freqInput.addEventListener('change', () => {
+                    const value = parseInt(freqInput.value, 10);
+                    if (!Number.isInteger(value) || value < 1) {
+                        log('頻度は1以上の整数で指定してください。');
+                        freqInput.value = String(imagesData.sets[setName][filename]);
+                        return;
+                    }
+                    onFreqChange(setName, filename, value);
+                });
+                freqRow.appendChild(freqLabel);
+                freqRow.appendChild(freqInput);
+                wrap.appendChild(freqRow);
+            }
+            else {
+                const freqText = document.createElement('div');
+                freqText.className = 'caption';
+                freqText.textContent = `頻度: ${freq}`;
+                wrap.appendChild(freqText);
+            }
             if (onRemoveFromSet) {
                 const delBtn = document.createElement('button');
                 delBtn.className = 'delBtn';
@@ -223,6 +268,41 @@ function renderSets(imagesData, cache, onRemoveFromSet, onSetPrimary) {
             row.appendChild(wrap);
         }
         section.appendChild(row);
+        if (onAddToSet) {
+            const available = Array.from(cache.keys()).filter((f) => !(f in imagesData.sets[setName]));
+            if (available.length > 0) {
+                const addRow = document.createElement('div');
+                addRow.style.cssText = 'margin-top:0.5rem; display:flex; align-items:center; gap:0.4rem;';
+                const select = document.createElement('select');
+                for (const f of available) {
+                    const opt = document.createElement('option');
+                    opt.value = f;
+                    opt.textContent = f.replace(/\.raw$/, '');
+                    select.appendChild(opt);
+                }
+                const freqInput = document.createElement('input');
+                freqInput.type = 'number';
+                freqInput.min = '1';
+                freqInput.step = '1';
+                freqInput.value = '1';
+                freqInput.style.width = '60px';
+                const addBtn = document.createElement('button');
+                addBtn.textContent = 'このセットに追加';
+                addBtn.style.fontSize = '0.8rem';
+                addBtn.addEventListener('click', () => {
+                    const value = parseInt(freqInput.value, 10);
+                    if (!Number.isInteger(value) || value < 1) {
+                        log('頻度は1以上の整数で指定してください。');
+                        return;
+                    }
+                    onAddToSet(setName, select.value, value);
+                });
+                addRow.appendChild(select);
+                addRow.appendChild(freqInput);
+                addRow.appendChild(addBtn);
+                section.appendChild(addRow);
+            }
+        }
         setsEl.appendChild(section);
     }
 }
@@ -288,7 +368,12 @@ async function loadWithNewProtocol() {
             done++;
             log(`${filename} 取得完了 (${bytes.length} bytes)`);
         }
-        renderSets(imagesData, cache, handleRemoveFromSet, handleSetPrimary);
+        renderSets(imagesData, cache, {
+            onRemoveFromSet: handleRemoveFromSet,
+            onSetPrimary: handleSetPrimary,
+            onFreqChange: handleFreqChange,
+            onAddToSet: handleAddToSet,
+        });
         setLoadStatus(`完了（${total}枚、新プロトコル）`);
         await refreshStorageInfo();
     }
@@ -326,6 +411,39 @@ async function handleSetPrimary(setName) {
         currentImagesData.primary = setName;
         const result = await savePresets(currentImagesData);
         log(`primaryを「${setName}」に変更しました。`);
+        if (result.warning) {
+            log('警告: ' + result.warning);
+        }
+        await loadWithNewProtocol();
+    }
+    catch (e) {
+        log('保存失敗: ' + e.message);
+    }
+}
+// 既存の画像の表示頻度を変更する（画像自体は変わらないので全体再読み込みはせず即時保存だけ行う）
+async function handleFreqChange(setName, filename, value) {
+    if (!currentImagesData)
+        return;
+    try {
+        currentImagesData.sets[setName][filename] = value;
+        const result = await savePresets(currentImagesData);
+        log(`「${setName}」の${filename}の頻度を${value}に変更しました。`);
+        if (result.warning) {
+            log('警告: ' + result.warning);
+        }
+    }
+    catch (e) {
+        log('保存失敗: ' + e.message);
+    }
+}
+// プールにある画像を、指定した頻度でこのセットに新たに追加する
+async function handleAddToSet(setName, filename, freq) {
+    if (!currentImagesData)
+        return;
+    try {
+        currentImagesData.sets[setName][filename] = freq;
+        const result = await savePresets(currentImagesData);
+        log(`「${setName}」に ${filename}（頻度${freq}）を追加しました。`);
         if (result.warning) {
             log('警告: ' + result.warning);
         }
@@ -411,17 +529,22 @@ async function loadImagePool() {
             wrap.appendChild(img);
             wrap.appendChild(caption);
             const usedBy = usageMap.get(filename) || [];
+            const testBtn = document.createElement('button');
+            testBtn.className = 'delBtn';
+            testBtn.textContent = 'テスト表示';
+            testBtn.addEventListener('click', () => handleTestDisplay(filename));
+            wrap.appendChild(testBtn);
+            const delBtn = document.createElement('button');
+            delBtn.className = 'delBtn';
+            delBtn.textContent = '完全に削除';
+            delBtn.addEventListener('click', () => handlePoolDelete(filename, usedBy));
+            wrap.appendChild(delBtn);
             if (usedBy.length > 0) {
                 const badge = document.createElement('div');
                 badge.className = 'usedBy';
                 badge.textContent = `使用中: ${usedBy.join(', ')}`;
                 wrap.appendChild(badge);
             }
-            const delBtn = document.createElement('button');
-            delBtn.className = 'delBtn';
-            delBtn.textContent = '完全に削除';
-            delBtn.addEventListener('click', () => handlePoolDelete(filename, usedBy));
-            wrap.appendChild(delBtn);
             poolListEl.appendChild(wrap);
         }
         poolStatusEl.textContent = `完了（${total}枚）`;
@@ -431,6 +554,16 @@ async function loadImagePool() {
         log('プール読み込み失敗: ' + e.message);
     }
     loadPoolBtn.disabled = false;
+}
+async function handleTestDisplay(filename) {
+    try {
+        log(`テスト表示: ${filename}`);
+        await testDisplay(filename);
+        log(`テスト表示完了: ${filename}`);
+    }
+    catch (e) {
+        log('テスト表示失敗: ' + e.message);
+    }
 }
 async function handlePoolDelete(filename, usedBy) {
     const warning = usedBy.length > 0
