@@ -1,2 +1,2 @@
 // このファイルは npm run build のたびに gen-version.js が自動生成します。手動編集しないでください。
-export const BUILD_VERSION = "2026-08-27 16:54:18 JST";
+export const BUILD_VERSION = "2026-08-27 16:57:23 JST";
