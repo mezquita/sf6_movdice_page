@@ -10,12 +10,26 @@ const helloBtn = document.getElementById('helloBtn') as HTMLButtonElement;
 const loadStatusEl = document.getElementById('loadStatus') as HTMLDivElement;
 const setsEl = document.getElementById('sets') as HTMLDivElement;
 const logEl = document.getElementById('log') as HTMLDivElement;
+const copyLogBtn = document.getElementById('copyLogBtn') as HTMLButtonElement;
 
 function log(msg: string): void {
   const time = new Date().toLocaleTimeString();
   logEl.textContent += `[${time}] ${msg}\n`;
   logEl.scrollTop = logEl.scrollHeight;
 }
+
+copyLogBtn.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(logEl.textContent || '');
+    const original = copyLogBtn.textContent;
+    copyLogBtn.textContent = 'コピーしました';
+    setTimeout(() => {
+      copyLogBtn.textContent = original;
+    }, 1500);
+  } catch (e) {
+    log('クリップボードへのコピーに失敗: ' + (e as Error).message);
+  }
+});
 
 function setStatus(text: string, cls: string): void {
   statusEl.textContent = text;

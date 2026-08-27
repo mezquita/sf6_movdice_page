@@ -3,11 +3,25 @@ const statusEl = document.getElementById('status');
 const connectBtn = document.getElementById('connectBtn');
 const forgetBtn = document.getElementById('forgetBtn');
 const logEl = document.getElementById('log');
+const copyLogBtn = document.getElementById('copyLogBtn');
 function log(msg) {
     const time = new Date().toLocaleTimeString();
     logEl.textContent += `[${time}] ${msg}\n`;
     logEl.scrollTop = logEl.scrollHeight;
 }
+copyLogBtn.addEventListener('click', async () => {
+    try {
+        await navigator.clipboard.writeText(logEl.textContent || '');
+        const original = copyLogBtn.textContent;
+        copyLogBtn.textContent = 'コピーしました';
+        setTimeout(() => {
+            copyLogBtn.textContent = original;
+        }, 1500);
+    }
+    catch (e) {
+        log('クリップボードへのコピーに失敗: ' + e.message);
+    }
+});
 function setStatus(text, cls) {
     statusEl.textContent = text;
     statusEl.className = cls;

@@ -4,12 +4,26 @@ const statusEl = document.getElementById('status') as HTMLDivElement;
 const connectBtn = document.getElementById('connectBtn') as HTMLButtonElement;
 const forgetBtn = document.getElementById('forgetBtn') as HTMLButtonElement;
 const logEl = document.getElementById('log') as HTMLDivElement;
+const copyLogBtn = document.getElementById('copyLogBtn') as HTMLButtonElement;
 
 function log(msg: string): void {
   const time = new Date().toLocaleTimeString();
   logEl.textContent += `[${time}] ${msg}\n`;
   logEl.scrollTop = logEl.scrollHeight;
 }
+
+copyLogBtn.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(logEl.textContent || '');
+    const original = copyLogBtn.textContent;
+    copyLogBtn.textContent = 'コピーしました';
+    setTimeout(() => {
+      copyLogBtn.textContent = original;
+    }, 1500);
+  } catch (e) {
+    log('クリップボードへのコピーに失敗: ' + (e as Error).message);
+  }
+});
 
 function setStatus(text: string, cls: string): void {
   statusEl.textContent = text;
