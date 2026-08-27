@@ -45,3 +45,16 @@ export async function hello() {
     const res = await sendCommand('hello');
     return res.meta;
 }
+export async function listImages() {
+    const res = await sendCommand('list_images');
+    return res.meta.files ?? [];
+}
+export async function getImage(filename) {
+    const res = await sendCommand('get_image', { filename });
+    return res.body;
+}
+export async function getPresets() {
+    const res = await sendCommand('get_presets');
+    const text = new TextDecoder().decode(res.body);
+    return JSON.parse(text);
+}

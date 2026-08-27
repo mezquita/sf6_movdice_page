@@ -9,6 +9,7 @@
 //   [M bytes] バイナリ本体
 
 import { MovSerial } from './serial.js';
+import { ImagesJson } from './imageDecode.js';
 
 export interface ConfigMeta {
   ok: boolean;
@@ -66,4 +67,20 @@ export async function sendCommand(
 export async function hello(): Promise<ConfigMeta> {
   const res = await sendCommand('hello');
   return res.meta;
+}
+
+export async function listImages(): Promise<string[]> {
+  const res = await sendCommand('list_images');
+  return (res.meta.files as string[] | undefined) ?? [];
+}
+
+export async function getImage(filename: string): Promise<Uint8Array> {
+  const res = await sendCommand('get_image', { filename });
+  return res.body;
+}
+
+export async function getPresets(): Promise<ImagesJson> {
+  const res = await sendCommand('get_presets');
+  const text = new TextDecoder().decode(res.body);
+  return JSON.parse(text) as ImagesJson;
 }

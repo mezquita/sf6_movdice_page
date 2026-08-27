@@ -1,11 +1,12 @@
 import { MovSerial } from './serial.js';
 import { base64ToBytes, decodeRleToRgba, decodeRawToRgba, rgbaToDataUrl } from './imageDecode.js';
-import { hello } from './protocol.js';
+import { hello, listImages, getImage, getPresets } from './protocol.js';
 const statusEl = document.getElementById('status');
 const connectBtn = document.getElementById('connectBtn');
 const forgetBtn = document.getElementById('forgetBtn');
 const loadBtn = document.getElementById('loadBtn');
 const helloBtn = document.getElementById('helloBtn');
+const loadNewBtn = document.getElementById('loadNewBtn');
 const loadStatusEl = document.getElementById('loadStatus');
 const setsEl = document.getElementById('sets');
 const logEl = document.getElementById('log');
@@ -41,6 +42,7 @@ function refreshUi() {
     forgetBtn.disabled = !connected;
     loadBtn.disabled = !connected;
     helloBtn.disabled = !connected;
+    loadNewBtn.disabled = !connected;
     setStatus(connected ? '接続済み（許可済み）' : '未接続', connected ? 'status-connected' : 'status-none');
 }
 helloBtn.addEventListener('click', async () => {
@@ -176,5 +178,33 @@ loadBtn.addEventListener('click', async () => {
         log('読み込み失敗: ' + e.message);
     }
     loadBtn.disabled = false;
+});
+loadNewBtn.addEventListener('click', async () => {
+    loadNewBtn.disabled = true;
+    try {
+        setLoadStatus('新プロトコルでプリセットを取得しています...');
+        const imagesData = await getPresets();
+        log('プリセット取得完了: ' + JSON.stringify(imagesData));
+        const filenames = await listImages();
+        log('画像一覧: ' + JSON.stringify(filenames));
+        const cache = new Map();
+        const total = filenames.length;
+        let done = 0;
+        for (const filename of filenames) {
+            setLoadStatus(`画像を取得中... (${done}/${total}) ${filename}`);
+            const bytes = await getImage(filename);
+            const rgba = imagesData.use_rle ? decodeRleToRgba(bytes) : decodeRawToRgba(bytes);
+            cache.set(filename, rgbaToDataUrl(rgba));
+            done++;
+            log(`${filename} 取得完了 (${bytes.length} bytes)`);
+        }
+        renderSets(imagesData, cache);
+        setLoadStatus(`完了（${total}枚、新プロトコル）`);
+    }
+    catch (e) {
+        setLoadStatus('エラー: ' + e.message);
+        log('読み込み失敗: ' + e.message);
+    }
+    loadNewBtn.disabled = false;
 });
 tryAutoConnect();
