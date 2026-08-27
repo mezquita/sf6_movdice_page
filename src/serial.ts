@@ -151,6 +151,18 @@ export const MovSerial = (() => {
     return consumed;
   }
 
+  // 指定バイト数がバッファに集まるまで待って取り出す（独自プロトコルのフレーム読み取り用）
+  async function readExactBytes(n: number, timeoutMs = 8000): Promise<number[]> {
+    const start = Date.now();
+    while (rxBuffer.length < n) {
+      if (Date.now() - start > timeoutMs) {
+        throw new Error(`タイムアウト: ${n}バイト読めませんでした（${rxBuffer.length}バイトのみ受信）`);
+      }
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    return consumeUpTo(n);
+  }
+
   // MicroPythonのRaw REPLに入る（Thonny/mpremote等と同じ仕組み）
   async function enterRawRepl(): Promise<void> {
     rxBuffer = [];
@@ -204,5 +216,7 @@ export const MovSerial = (() => {
     exitRawRepl,
     execRaw,
     setDebugLogger,
+    writeBytes,
+    readExactBytes,
   };
 })();

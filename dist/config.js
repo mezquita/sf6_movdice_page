@@ -1,9 +1,11 @@
 import { MovSerial } from './serial.js';
 import { base64ToBytes, decodeRleToRgba, decodeRawToRgba, rgbaToDataUrl } from './imageDecode.js';
+import { hello } from './protocol.js';
 const statusEl = document.getElementById('status');
 const connectBtn = document.getElementById('connectBtn');
 const forgetBtn = document.getElementById('forgetBtn');
 const loadBtn = document.getElementById('loadBtn');
+const helloBtn = document.getElementById('helloBtn');
 const loadStatusEl = document.getElementById('loadStatus');
 const setsEl = document.getElementById('sets');
 const logEl = document.getElementById('log');
@@ -24,8 +26,21 @@ function refreshUi() {
     const connected = MovSerial.isConnected();
     forgetBtn.disabled = !connected;
     loadBtn.disabled = !connected;
+    helloBtn.disabled = !connected;
     setStatus(connected ? '接続済み（許可済み）' : '未接続', connected ? 'status-connected' : 'status-none');
 }
+helloBtn.addEventListener('click', async () => {
+    helloBtn.disabled = true;
+    try {
+        log('新プロトコル: helloを送信します。');
+        const meta = await hello();
+        log('hello応答: ' + JSON.stringify(meta));
+    }
+    catch (e) {
+        log('hello失敗: ' + e.message);
+    }
+    helloBtn.disabled = false;
+});
 async function tryAutoConnect() {
     if (!MovSerial.isSupported()) {
         setStatus('このブラウザはWeb Serial APIに対応していません（Chrome/Edgeを使ってください）', 'status-error');

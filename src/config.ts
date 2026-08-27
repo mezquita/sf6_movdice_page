@@ -1,10 +1,12 @@
 import { MovSerial } from './serial.js';
 import { ImagesJson, base64ToBytes, decodeRleToRgba, decodeRawToRgba, rgbaToDataUrl } from './imageDecode.js';
+import { hello } from './protocol.js';
 
 const statusEl = document.getElementById('status') as HTMLDivElement;
 const connectBtn = document.getElementById('connectBtn') as HTMLButtonElement;
 const forgetBtn = document.getElementById('forgetBtn') as HTMLButtonElement;
 const loadBtn = document.getElementById('loadBtn') as HTMLButtonElement;
+const helloBtn = document.getElementById('helloBtn') as HTMLButtonElement;
 const loadStatusEl = document.getElementById('loadStatus') as HTMLDivElement;
 const setsEl = document.getElementById('sets') as HTMLDivElement;
 const logEl = document.getElementById('log') as HTMLDivElement;
@@ -30,8 +32,21 @@ function refreshUi(): void {
   const connected = MovSerial.isConnected();
   forgetBtn.disabled = !connected;
   loadBtn.disabled = !connected;
+  helloBtn.disabled = !connected;
   setStatus(connected ? '接続済み（許可済み）' : '未接続', connected ? 'status-connected' : 'status-none');
 }
+
+helloBtn.addEventListener('click', async () => {
+  helloBtn.disabled = true;
+  try {
+    log('新プロトコル: helloを送信します。');
+    const meta = await hello();
+    log('hello応答: ' + JSON.stringify(meta));
+  } catch (e) {
+    log('hello失敗: ' + (e as Error).message);
+  }
+  helloBtn.disabled = false;
+});
 
 async function tryAutoConnect(): Promise<void> {
   if (!MovSerial.isSupported()) {
