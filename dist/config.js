@@ -17,6 +17,8 @@ const uploadFilenameInput = document.getElementById('uploadFilename');
 const uploadBtn = document.getElementById('uploadBtn');
 const buildVersionEl = document.getElementById('buildVersion');
 const storageInfoEl = document.getElementById('storageInfo');
+const testSizeInput = document.getElementById('testSize');
+const testUploadBtn = document.getElementById('testUploadBtn');
 buildVersionEl.textContent = 'hash: ' + BUILD_VERSION;
 function formatBytes(n) {
     return (n / 1024).toFixed(1) + ' KB';
@@ -84,8 +86,30 @@ function refreshUi() {
     uploadFileInput.disabled = !connected;
     uploadFilenameInput.disabled = !connected;
     uploadBtn.disabled = !connected;
+    testSizeInput.disabled = !connected;
+    testUploadBtn.disabled = !connected;
     setStatus(connected ? '接続済み（許可済み）' : '未接続', connected ? 'status-connected' : 'status-none');
 }
+testUploadBtn.addEventListener('click', async () => {
+    const size = parseInt(testSizeInput.value, 10) || 0;
+    if (size <= 0) {
+        log('サイズを指定してください。');
+        return;
+    }
+    const dummy = new Uint8Array(size).fill(0x41);
+    testUploadBtn.disabled = true;
+    try {
+        log(`テスト送信開始: ${size} bytes`);
+        const start = performance.now();
+        await uploadImage('__test__.raw', dummy);
+        const elapsed = Math.round(performance.now() - start);
+        log(`テスト送信成功: ${size} bytes (${elapsed} ms)`);
+    }
+    catch (e) {
+        log(`テスト送信失敗 (${size} bytes): ` + e.message);
+    }
+    testUploadBtn.disabled = false;
+});
 helloBtn.addEventListener('click', async () => {
     helloBtn.disabled = true;
     try {
