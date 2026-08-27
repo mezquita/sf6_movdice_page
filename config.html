@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>movdice 設定（画像プレビュー実験）</title>
+<style>
+  body { font-family: sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+  #status { padding: 0.75rem; border-radius: 6px; margin: 1rem 0; }
+  .status-none { background: #eee; }
+  .status-connected { background: #d4edda; color: #155724; }
+  .status-error { background: #f8d7da; color: #721c24; }
+  button { padding: 0.5rem 1rem; margin-right: 0.5rem; margin-bottom: 0.5rem; }
+  #log { font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; background: #f5f5f5; padding: 0.5rem; height: 150px; overflow-y: auto; }
+  #loadStatus { margin: 1rem 0; color: #555; }
+  .set-section { margin: 1.5rem 0; }
+  .set-section h3 { margin-bottom: 0.5rem; }
+  .thumb-row { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+  .thumb { width: 110px; }
+  .thumb img { width: 100%; border: 1px solid #ccc; border-radius: 4px; display: block; }
+  .thumb .caption { font-size: 0.75rem; text-align: center; margin-top: 0.2rem; word-break: break-all; }
+</style>
+</head>
+<body>
+<p><a href="./index.html">&larr; 接続実験ページに戻る</a></p>
+<h1>movdice 設定（画像プレビュー実験）</h1>
+<p>
+  接続中のESP32から <code>images.json</code> と画像を読み出し、プリセットごとに一覧表示する実験ページ。<br>
+  <strong>MicroPythonのRaw REPLを直接使う暫定実装</strong>で、本番の設定ツール用プロトコルとは別物。
+</p>
+
+<div id="status" class="status-none">未接続</div>
+
+<button id="connectBtn">ESP32に接続</button>
+<button id="forgetBtn" disabled>アクセスを取り消す</button>
+<button id="loadBtn" disabled>画像一覧を読み込む</button>
+
+<div id="loadStatus"></div>
+<div id="sets"></div>
+
+<h2>ログ</h2>
+<div id="log"></div>
+
+<script type="module">
+import { MovSerial } from './serial.js';
+
+const IMG_WIDTH = 320;
+const IMG_HEIGHT = 172;
+
+const statusEl = document.getElementById('status');
+const connectBtn = document.getElementById('connectBtn');
+const forgetBtn = document.getElementById('forgetBtn');
+const loadBtn = document.getElementById('loadBtn');
+const loadStatusEl = document.getElementById('loadStatus');
+const setsEl = document.getElementById('sets');
+const logEl = document.getElementById('log');
+
+function log(msg) {
+  const time = new Date().toLocaleTimeString();
+  logEl.textContent += `[${time}] ${msg}\n`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function setStatus(text, cls) {
+  statusEl.textContent = text;
+  statusEl.className = cls;
+}
+
+function setLoadStatus(text) {
+  loadStatusEl.textContent = text;
+}
+
+function refreshUi() {
+  const connected = MovSerial.isConnected();
+  forgetBtn.disabled = !connected;
+  loadBtn.disabled = !connected;
+  setStatus(connected ? '接続済み（許可済み）' : '未接続', connected ? 'status-connected' : 'status-none');
+}
+
+async function tryAutoConnect() {
+  if (!MovSerial.isSupported()) {
+    setStatus('このブラウザはWeb Serial APIに対応していません（Chrome/Edgeを使ってください）', 'status-error');
+    connectBtn.disabled = true;
+    return;
+  }
+  const found = await MovSerial.getRememberedPort();
+  if (found) {
+    log('許可済みデバイスを検出。自動接続します。');
+    try {
+      await MovSerial.connect(found);
+      log('ポートをopenしました。');
+    } catch (e) {
+      setStatus('接続エラー: ' + e.message, 'status-error');
+      log('open失敗: ' + e.message);
+    }
+    refreshUi();
+  } else {
+    log('許可済みデバイスはありません。「ESP32に接続」を押してください。');
+  }
+}
+
+connectBtn.addEventListener('click', async () => {
+  try {
+    const p = await MovSerial.requestNewPort();
+    log('デバイスが選択されました。');
+    await MovSerial.connect(p);
+    log('ポートをopenしました。');
+  } catch (e) {
+    setStatus('接続エラー: ' + e.message, 'status-error');
+    log('接続失敗: ' + e.message);
+  }
+  refreshUi();
+});
+
+forgetBtn.addEventListener('click', async () => {
+  await MovSerial.disconnectAndForget();
+  log('アクセスを取り消しました。');
+  setsEl.innerHTML = '';
+  setLoadStatus('');
+  refreshUi();
+});
+
+// --- 画像読み込み・デコード ---
+
+function base64ToBytes(b64) {
+  const bin = atob(b64.trim());
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function rgb565ToRgb888(val) {
+  const r5 = (val >> 11) & 0x1F;
+  const g6 = (val >> 5) & 0x3F;
+  const b5 = val & 0x1F;
+  return [
+    Math.round(r5 * 255 / 31),
+    Math.round(g6 * 255 / 63),
+    Math.round(b5 * 255 / 31),
+  ];
+}
+
+// img_cvt.pyの_rle_encode / main.pyの_draw_image_rleと対のデコード
+// トークン形式: 色2byte(big-endian) + (ラン長-1)1byte
+function decodeRleToRgba(bytes) {
+  const pixelCount = IMG_WIDTH * IMG_HEIGHT;
+  const rgba = new Uint8ClampedArray(pixelCount * 4);
+  let pos = 0, outPixel = 0;
+  const n = bytes.length;
+  while (pos + 2 < n && outPixel < pixelCount) {
+    const hi = bytes[pos], lo = bytes[pos + 1];
+    const run = bytes[pos + 2] + 1;
+    pos += 3;
+    const [r, g, b] = rgb565ToRgb888((hi << 8) | lo);
+    for (let i = 0; i < run && outPixel < pixelCount; i++) {
+      const idx = outPixel * 4;
+      rgba[idx] = r; rgba[idx + 1] = g; rgba[idx + 2] = b; rgba[idx + 3] = 255;
+      outPixel++;
+    }
+  }
+  return rgba;
+}
+
+// RLEを使わない場合（images.jsonのuse_rleがfalse）の生RGB565デコード
+function decodeRawToRgba(bytes) {
+  const pixelCount = IMG_WIDTH * IMG_HEIGHT;
+  const rgba = new Uint8ClampedArray(pixelCount * 4);
+  for (let i = 0; i < pixelCount; i++) {
+    const hi = bytes[i * 2], lo = bytes[i * 2 + 1];
+    const [r, g, b] = rgb565ToRgb888((hi << 8) | lo);
+    const idx = i * 4;
+    rgba[idx] = r; rgba[idx + 1] = g; rgba[idx + 2] = b; rgba[idx + 3] = 255;
+  }
+  return rgba;
+}
+
+function rgbaToDataUrl(rgba) {
+  const canvas = document.createElement('canvas');
+  canvas.width = IMG_WIDTH;
+  canvas.height = IMG_HEIGHT;
+  const ctx = canvas.getContext('2d');
+  ctx.putImageData(new ImageData(rgba, IMG_WIDTH, IMG_HEIGHT), 0, 0);
+  return canvas.toDataURL('image/png');
+}
+
+async function fetchImagesJson() {
+  const jsonStr = await MovSerial.execRaw("print(open('images.json').read())");
+  return JSON.parse(jsonStr);
+}
+
+async function fetchRawFileBase64(filename) {
+  const safe = filename.replace(/'/g, "");
+  const code = `import binascii\nprint(binascii.b2a_base64(open('img/${safe}','rb').read()).decode())`;
+  return await MovSerial.execRaw(code);
+}
+
+function renderSets(imagesData) {
+  setsEl.innerHTML = '';
+  for (const setName of Object.keys(imagesData.sets)) {
+    const section = document.createElement('div');
+    section.className = 'set-section';
+
+    const heading = document.createElement('h3');
+    heading.textContent = setName + (setName === imagesData.primary ? '（primary）' : '');
+    section.appendChild(heading);
+
+    const row = document.createElement('div');
+    row.className = 'thumb-row';
+    for (const filename of Object.keys(imagesData.sets[setName])) {
+      const wrap = document.createElement('div');
+      wrap.className = 'thumb';
+
+      const img = document.createElement('img');
+      img.src = imagesData._cache.get(filename) || '';
+      img.alt = filename;
+
+      const caption = document.createElement('div');
+      caption.className = 'caption';
+      caption.textContent = filename.replace(/\.raw$/, '');
+
+      wrap.appendChild(img);
+      wrap.appendChild(caption);
+      row.appendChild(wrap);
+    }
+    section.appendChild(row);
+    setsEl.appendChild(section);
+  }
+}
+
+loadBtn.addEventListener('click', async () => {
+  loadBtn.disabled = true;
+  try {
+    setLoadStatus('images.jsonを取得しています...');
+    log('Raw REPLに入ります。');
+    await MovSerial.enterRawRepl();
+
+    let imagesData;
+    try {
+      imagesData = await fetchImagesJson();
+      log('images.jsonを取得しました。');
+
+      const allFilenames = new Set();
+      for (const setName of Object.keys(imagesData.sets)) {
+        for (const filename of Object.keys(imagesData.sets[setName])) {
+          allFilenames.add(filename);
+        }
+      }
+
+      const cache = new Map();
+      const total = allFilenames.size;
+      let done = 0;
+      for (const filename of allFilenames) {
+        setLoadStatus(`画像を取得中... (${done}/${total}) ${filename}`);
+        const b64 = await fetchRawFileBase64(filename);
+        const bytes = base64ToBytes(b64);
+        const rgba = imagesData.use_rle ? decodeRleToRgba(bytes) : decodeRawToRgba(bytes);
+        cache.set(filename, rgbaToDataUrl(rgba));
+        done++;
+        log(`${filename} 取得完了 (${bytes.length} bytes)`);
+      }
+      imagesData._cache = cache;
+      renderSets(imagesData);
+      setLoadStatus(`完了（${total}枚）`);
+    } finally {
+      await MovSerial.exitRawRepl();
+      log('Raw REPLを抜けました。');
+    }
+  } catch (e) {
+    setLoadStatus('エラー: ' + e.message);
+    log('読み込み失敗: ' + e.message);
+  }
+  loadBtn.disabled = false;
+});
+
+tryAutoConnect();
+</script>
+</body>
+</html>

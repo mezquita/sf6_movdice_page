@@ -16,7 +16,10 @@
 <body>
 <h1>movdice 接続実験</h1>
 <p>ESP32との接続だけを試す実験用ページ。Chrome/Edgeでのみ動作します。</p>
-<p><a href="./about.html">このツールについて（概要・技術スタック）</a></p>
+<p>
+  <a href="./about.html">このツールについて（概要・技術スタック）</a><br>
+  <a href="./config.html">画像・プリセットの設定画面へ</a>
+</p>
 
 <div id="status" class="status-none">未接続</div>
 
@@ -26,11 +29,8 @@
 <h2>ログ</h2>
 <div id="log"></div>
 
-<script>
-const USB_VENDOR_ID = 0x303A;  // Espressif
-const USB_PRODUCT_ID = 0x1001; // ESP32-C6 USB Serial/JTAG
-
-let port = null;
+<script type="module">
+import { MovSerial } from './serial.js';
 
 const statusEl = document.getElementById('status');
 const connectBtn = document.getElementById('connectBtn');
@@ -48,64 +48,51 @@ function setStatus(text, cls) {
   statusEl.className = cls;
 }
 
+function refreshUi() {
+  const connected = MovSerial.isConnected();
+  forgetBtn.disabled = !connected;
+  setStatus(connected ? '接続済み（許可済み）' : '未接続', connected ? 'status-connected' : 'status-none');
+}
+
 async function tryAutoConnect() {
-  if (!('serial' in navigator)) {
+  if (!MovSerial.isSupported()) {
     setStatus('このブラウザはWeb Serial APIに対応していません（Chrome/Edgeを使ってください）', 'status-error');
     connectBtn.disabled = true;
     return;
   }
-  const ports = await navigator.serial.getPorts();
-  const found = ports.find(p => {
-    const info = p.getInfo();
-    return info.usbVendorId === USB_VENDOR_ID && info.usbProductId === USB_PRODUCT_ID;
-  });
+  const found = await MovSerial.getRememberedPort();
   if (found) {
     log('許可済みデバイスを検出。自動接続します。');
-    await connectToPort(found);
+    try {
+      await MovSerial.connect(found);
+      log('ポートをopenしました。');
+    } catch (e) {
+      setStatus('接続エラー: ' + e.message, 'status-error');
+      log('open失敗: ' + e.message);
+    }
+    refreshUi();
   } else {
     log('許可済みデバイスはありません。「ESP32に接続」を押してください。');
   }
 }
 
-async function connectToPort(p) {
+connectBtn.addEventListener('click', async () => {
   try {
-    await p.open({ baudRate: 115200 });
-    port = p;
-    setStatus('接続済み（許可済み）', 'status-connected');
-    forgetBtn.disabled = false;
+    const p = await MovSerial.requestNewPort();
+    log('デバイスが選択されました。');
+    await MovSerial.connect(p);
     log('ポートをopenしました。');
   } catch (e) {
     setStatus('接続エラー: ' + e.message, 'status-error');
-    log('open失敗: ' + e.message);
+    log('接続失敗: ' + e.message);
   }
-}
-
-connectBtn.addEventListener('click', async () => {
-  try {
-    const p = await navigator.serial.requestPort({
-      filters: [{ usbVendorId: USB_VENDOR_ID, usbProductId: USB_PRODUCT_ID }]
-    });
-    log('デバイスが選択されました。');
-    await connectToPort(p);
-  } catch (e) {
-    log('選択キャンセルまたはエラー: ' + e.message);
-  }
+  refreshUi();
 });
 
 forgetBtn.addEventListener('click', async () => {
-  if (!port) return;
-  try {
-    if (port.readable || port.writable) {
-      await port.close();
-    }
-  } catch (e) {
-    log('close時エラー: ' + e.message);
-  }
-  await port.forget();
+  await MovSerial.disconnectAndForget();
   log('アクセスを取り消しました。');
-  port = null;
-  forgetBtn.disabled = true;
-  setStatus('未接続', 'status-none');
+  refreshUi();
 });
 
 tryAutoConnect();
