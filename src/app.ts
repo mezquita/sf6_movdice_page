@@ -44,8 +44,7 @@ function showTab(tab: TabName): void {
   for (const name of Object.keys(tabButtons) as TabName[]) {
     const active = name === tab;
     tabPanels[name].classList.toggle('active', active);
-    // 塗りつぶしのまま色(secondary)だけ変える。outlineだと非アクティブが薄すぎて気づかれない。
-    tabButtons[name].classList.toggle('secondary', !active);
+    tabButtons[name].classList.toggle('active-tab', active);
   }
 }
 

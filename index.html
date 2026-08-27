@@ -5,7 +5,20 @@
 <title>movdice 設定</title>
 <link rel="stylesheet" href="./pico.min.css">
 <style>
-  #status { padding: 0.75rem; text-align: center; }
+  /* Pico.cssはビューポート幅に応じてfont-size/spacingをレスポンシブ拡大する仕様があり、
+     それが「Bootstrapっぽく大仰に見える」主因だったため、固定値に絞ってコンパクトにする。 */
+  :root {
+    --pico-font-size: 100%;
+    --pico-spacing: 0.75rem;
+    --pico-form-element-spacing-vertical: 0.4rem;
+    --pico-form-element-spacing-horizontal: 0.75rem;
+  }
+  main.container { padding-top: 1.25rem; padding-bottom: 1.25rem; }
+  h1 { font-size: 1.4rem; margin-bottom: 0.4rem; }
+  h2 { font-size: 1.1rem; margin: 1rem 0 0.5rem; }
+  h3 { font-size: 0.95rem; margin: 0.4rem 0 0.3rem; }
+  button { font-size: 0.85rem; }
+  #status { padding: 0.5rem; text-align: center; font-size: 0.9rem; }
   .status-none { background: var(--pico-secondary-background); }
   .status-connected { background: #d4edda; color: #155724; }
   .status-error { background: #f8d7da; color: #721c24; }
@@ -19,6 +32,10 @@
   .thumb img { width: 100%; border: 1px solid var(--pico-muted-border-color); border-radius: 4px; display: block; }
   .thumb .caption { font-size: 0.75rem; text-align: center; margin-top: 0.2rem; word-break: break-all; }
   .thumb .delBtn { width: 100%; font-size: 0.7rem; padding: 0.15rem 0; margin-top: 0.2rem; }
+  .thumb input[type="number"] { padding: 0.15rem 0.3rem; height: auto; font-size: 0.8rem; }
+  .addToSetRow select { max-width: 130px; }
+  .addToSetRow input[type="number"] { padding: 0.15rem 0.3rem; height: auto; }
+  .addToSetRow button { font-size: 0.8rem; padding: 0.2rem 0.6rem; }
   #uploadBox, #debugBox, #poolBox, #addSetBox { margin: 1rem 0; padding: 0.75rem; border: 1px dashed var(--pico-muted-border-color); border-radius: 6px; }
   .uploadRow { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 0.5rem 0; }
   .uploadRow input, .uploadRow button { margin: 0; width: auto; }
@@ -32,10 +49,18 @@
   .toolbar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 1rem 0; }
   .toolbar button { margin: 0; width: auto; }
   #saveStatus { color: #155724; font-weight: bold; }
-  nav.tabs { display: flex; gap: 0.5rem; margin: 1.5rem 0 1rem; border-bottom: 1px solid var(--pico-muted-border-color); padding-bottom: 0.5rem; flex-wrap: wrap; }
-  nav.tabs button { margin: 0; width: auto; }
+  /* 「タブ」であることが一目で伝わるよう、通常の塗りつぶしボタンとは別の見た目にする（下線タブ）。 */
+  nav.tabs { display: flex; gap: 0; margin: 1.25rem 0 1rem; border-bottom: 2px solid var(--pico-muted-border-color); flex-wrap: wrap; }
+  nav.tabs button {
+    margin: 0; width: auto;
+    background: none; border: none; border-bottom: 3px solid transparent; border-radius: 0;
+    color: var(--pico-muted-color); padding: 0.4rem 0.9rem; font-weight: normal; font-size: 0.9rem;
+  }
+  nav.tabs button:hover { color: var(--pico-color); background: none; }
+  nav.tabs button.active-tab { color: var(--pico-primary); border-bottom-color: var(--pico-primary); font-weight: bold; }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
+  footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--pico-muted-border-color); font-size: 0.85rem; }
 </style>
 </head>
 <body>
@@ -46,7 +71,6 @@
 
 <h1>movdice 設定</h1>
 <p id="buildVersion" class="hint"></p>
-<p><a href="./about.html">このツールについて（概要・技術スタック）</a></p>
 
 <nav class="tabs">
   <button id="tabConnBtn" data-tab="conn">接続</button>
@@ -62,16 +86,11 @@
   <p class="hint">接続できたら、まず「hello」を押して設定モードと疎通できているか確認してください。</p>
 </div>
 
-<div class="toolbar">
-  <button id="loadNewBtn" disabled>画像一覧を読み込む（設定モードで実行してください）</button>
-  <button id="saveBtn" disabled>設定を反映</button>
-  <span id="saveStatus"></span>
-  <button id="rebootBtn" class="secondary" disabled>再起動</button>
-</div>
-
-<div id="storageInfo"></div>
-
 <div id="tabPool" class="tab-panel">
+  <button id="loadPoolBtn" disabled>画像一覧を読み込む</button>
+  <div id="poolStatus"></div>
+  <div id="storageInfo"></div>
+
   <div id="uploadBox">
     <strong>画像アップロード</strong>
     <div class="uploadRow">
@@ -88,8 +107,6 @@
       アップロード済みの全画像（どのプリセットからも独立した実体）。ここでの削除は<strong>実ファイルの完全削除</strong>で、
       使用中のプリセットにも影響します。
     </p>
-    <button id="loadPoolBtn" disabled>プール一覧を読み込む</button>
-    <div id="poolStatus"></div>
     <div id="poolList" class="thumb-row"></div>
   </div>
 
@@ -101,6 +118,12 @@
 </div>
 
 <div id="tabChar" class="tab-panel">
+  <div class="toolbar">
+    <button id="loadNewBtn" disabled>キャラごと設定を読み込む</button>
+    <button id="saveBtn" disabled>設定を反映</button>
+    <span id="saveStatus"></span>
+    <button id="rebootBtn" class="secondary" disabled>再起動</button>
+  </div>
   <div id="loadStatus"></div>
   <div id="sets"></div>
 
@@ -146,6 +169,8 @@
 
 <h2>ログ <button id="copyLogBtn" style="font-size: 0.7rem; padding: 0.2rem 0.6rem;">コピー</button></h2>
 <div id="log"></div>
+
+<footer><a href="./about.html">このツールについて（概要・技術スタック）</a></footer>
 
 </main>
 <script type="module" src="./dist/app.js"></script>

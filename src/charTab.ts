@@ -3,7 +3,6 @@ import { ImagesJson, decodeRleToRgba, decodeRawToRgba, rgbaToDataUrl } from './i
 import { listImages, getImage, getPresets, savePresets, reboot } from './protocol.js';
 import { log } from './ui.js';
 import { appState } from './state.js';
-import { refreshStorageInfo } from './storageInfo.js';
 
 const loadNewBtn = document.getElementById('loadNewBtn') as HTMLButtonElement;
 const saveBtn = document.getElementById('saveBtn') as HTMLButtonElement;
@@ -136,10 +135,11 @@ function renderSets(imagesData: ImagesJson, cache: Map<string, string>, callback
       const available = Array.from(cache.keys()).filter((f) => !(f in imagesData.sets[setName]));
       if (available.length > 0) {
         const addRow = document.createElement('div');
+        addRow.className = 'addToSetRow';
         addRow.style.cssText = 'margin-top:0.5rem; display:flex; align-items:center; gap:0.4rem; font-size:0.85rem;';
 
         const selectLabel = document.createElement('span');
-        selectLabel.textContent = '画像ファイル名：';
+        selectLabel.textContent = '画像：';
 
         const select = document.createElement('select');
         for (const f of available) {
@@ -160,8 +160,7 @@ function renderSets(imagesData: ImagesJson, cache: Map<string, string>, callback
         freqInput.style.width = '60px';
 
         const addBtn = document.createElement('button');
-        addBtn.textContent = 'このセットに追加';
-        addBtn.style.fontSize = '0.8rem';
+        addBtn.textContent = '追加';
         addBtn.addEventListener('click', () => {
           const value = parseInt(freqInput.value, 10);
           if (!Number.isInteger(value) || value < 1) {
@@ -220,7 +219,6 @@ export async function loadWithNewProtocol(): Promise<void> {
     appState.cache = cache;
     rerenderSetsLocal();
     setLoadStatus(`完了（${total}枚）`);
-    await refreshStorageInfo();
   } catch (e) {
     setLoadStatus('エラー: ' + (e as Error).message);
     log('読み込み失敗: ' + (e as Error).message);
