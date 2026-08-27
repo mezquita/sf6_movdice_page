@@ -92,3 +92,18 @@ export async function uploadImage(filename: string, data: Uint8Array): Promise<v
 export async function deleteImage(filename: string): Promise<void> {
   await sendCommand('delete_image', { filename });
 }
+
+export interface StorageInfo {
+  freeBytes: number;
+  imagesUsedBytes: number;
+  presetsUsedBytes: number;
+}
+
+export async function getStorageInfo(): Promise<StorageInfo> {
+  const res = await sendCommand('get_storage_info');
+  return {
+    freeBytes: res.meta.free_bytes as number,
+    imagesUsedBytes: res.meta.images_used_bytes as number,
+    presetsUsedBytes: res.meta.presets_used_bytes as number,
+  };
+}

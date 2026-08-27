@@ -64,3 +64,11 @@ export async function uploadImage(filename, data) {
 export async function deleteImage(filename) {
     await sendCommand('delete_image', { filename });
 }
+export async function getStorageInfo() {
+    const res = await sendCommand('get_storage_info');
+    return {
+        freeBytes: res.meta.free_bytes,
+        imagesUsedBytes: res.meta.images_used_bytes,
+        presetsUsedBytes: res.meta.presets_used_bytes,
+    };
+}

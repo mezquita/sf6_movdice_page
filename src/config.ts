@@ -1,6 +1,6 @@
 import { MovSerial } from './serial.js';
 import { ImagesJson, base64ToBytes, decodeRleToRgba, decodeRawToRgba, rgbaToDataUrl, pngFileToRgb565Rle } from './imageDecode.js';
-import { hello, listImages, getImage, getPresets, uploadImage, deleteImage } from './protocol.js';
+import { hello, listImages, getImage, getPresets, uploadImage, deleteImage, getStorageInfo } from './protocol.js';
 import { BUILD_VERSION } from './version.js';
 
 const statusEl = document.getElementById('status') as HTMLDivElement;
@@ -17,8 +17,41 @@ const uploadFileInput = document.getElementById('uploadFile') as HTMLInputElemen
 const uploadFilenameInput = document.getElementById('uploadFilename') as HTMLInputElement;
 const uploadBtn = document.getElementById('uploadBtn') as HTMLButtonElement;
 const buildVersionEl = document.getElementById('buildVersion') as HTMLParagraphElement;
+const storageInfoEl = document.getElementById('storageInfo') as HTMLDivElement;
 
 buildVersionEl.textContent = 'hash: ' + BUILD_VERSION;
+
+function formatBytes(n: number): string {
+  return (n / 1024).toFixed(1) + ' KB';
+}
+
+async function refreshStorageInfo(): Promise<void> {
+  try {
+    const info = await getStorageInfo();
+    const used = info.imagesUsedBytes + info.presetsUsedBytes;
+    const total = used + info.freeBytes;
+    const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
+
+    storageInfoEl.innerHTML = '';
+    const text = document.createElement('div');
+    text.textContent =
+      `ストレージ使用状況: 画像 ${formatBytes(info.imagesUsedBytes)} + プリセット ${formatBytes(info.presetsUsedBytes)}` +
+      ` = 使用 ${formatBytes(used)} / 空き ${formatBytes(info.freeBytes)}（使用率 ${pct}%）`;
+    storageInfoEl.appendChild(text);
+
+    const bar = document.createElement('div');
+    bar.id = 'storageBar';
+    const fill = document.createElement('div');
+    fill.id = 'storageBarFill';
+    fill.style.width = pct + '%';
+    if (pct >= 90) fill.className = 'danger';
+    else if (pct >= 70) fill.className = 'warn';
+    bar.appendChild(fill);
+    storageInfoEl.appendChild(bar);
+  } catch (e) {
+    storageInfoEl.textContent = 'ストレージ情報の取得に失敗: ' + (e as Error).message;
+  }
+}
 
 function log(msg: string): void {
   const time = new Date().toLocaleTimeString();
@@ -239,6 +272,7 @@ async function loadWithNewProtocol(): Promise<void> {
     }
     renderSets(imagesData, cache, handleDeleteClick);
     setLoadStatus(`完了（${total}枚、新プロトコル）`);
+    await refreshStorageInfo();
   } catch (e) {
     setLoadStatus('エラー: ' + (e as Error).message);
     log('読み込み失敗: ' + (e as Error).message);
@@ -276,11 +310,26 @@ uploadBtn.addEventListener('click', async () => {
   try {
     log(`${file.name} を変換しています...`);
     const rle = await pngFileToRgb565Rle(file);
-    log(`変換完了 (${rle.length} bytes)。アップロードします: ${filename}`);
+    log(`変換完了 (${rle.length} bytes)。`);
+
+    const info = await getStorageInfo();
+    if (rle.length > info.freeBytes) {
+      const proceed = confirm(
+        `空き容量が足りない可能性があります（空き${formatBytes(info.freeBytes)} / 必要${formatBytes(rle.length)}）。それでもアップロードしますか？`
+      );
+      if (!proceed) {
+        log('容量不足のためアップロードを中止しました。');
+        uploadBtn.disabled = false;
+        return;
+      }
+    }
+
+    log(`アップロードします: ${filename}`);
     await uploadImage(filename, rle);
     log(`アップロード完了: ${filename}`);
     uploadFileInput.value = '';
     uploadFilenameInput.value = '';
+    await refreshStorageInfo();
   } catch (e) {
     log('アップロード失敗: ' + (e as Error).message);
   }

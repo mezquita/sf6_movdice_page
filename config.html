@@ -21,6 +21,11 @@
   .thumb .delBtn { width: 100%; font-size: 0.7rem; padding: 0.15rem 0; margin-top: 0.2rem; }
   #uploadBox { margin: 1rem 0; padding: 0.75rem; border: 1px dashed #ccc; border-radius: 6px; }
   #uploadBox input[type="text"] { width: 180px; }
+  #storageInfo { margin: 1rem 0; padding: 0.6rem 0.75rem; background: #f5f5f5; border-radius: 6px; font-size: 0.85rem; }
+  #storageBar { height: 8px; background: #ddd; border-radius: 4px; overflow: hidden; margin-top: 0.4rem; }
+  #storageBarFill { height: 100%; background: #4a90d9; }
+  #storageBarFill.warn { background: #e0a800; }
+  #storageBarFill.danger { background: #d9534f; }
 </style>
 </head>
 <body>
@@ -39,6 +44,8 @@
 <button id="loadBtn" disabled>画像一覧を読み込む（Raw REPL版・暫定）</button>
 <button id="helloBtn" disabled>新プロトコルでhello（設定モードで実行してください）</button>
 <button id="loadNewBtn" disabled>新プロトコルで画像一覧を読み込む（設定モードで実行してください）</button>
+
+<div id="storageInfo"></div>
 
 <div id="uploadBox">
   <strong>画像アップロード（新プロトコル）</strong><br>
