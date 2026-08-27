@@ -3,28 +3,26 @@
 <head>
 <meta charset="UTF-8">
 <title>movdice 設定ツールについて</title>
+<link rel="stylesheet" href="./pico.min.css">
 <style>
-  body { font-family: sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; line-height: 1.7; }
-  h1 { font-size: 1.4rem; }
-  h2 { font-size: 1.1rem; margin-top: 2rem; border-bottom: 1px solid #ccc; padding-bottom: 0.3rem; }
-  table { border-collapse: collapse; margin: 1rem 0; }
-  th, td { border: 1px solid #ccc; padding: 0.4rem 0.8rem; text-align: left; }
-  a.back { display: inline-block; margin-bottom: 1.5rem; }
+  main { max-width: 640px; }
 </style>
 </head>
 <body>
-<a class="back" href="./index.html">&larr; 接続ページに戻る</a>
+<main class="container">
+
+<a href="./index.html">&larr; 接続ページに戻る</a>
 
 <h1>movdice 設定ツールについて</h1>
 
 <h2>このページは何をするものか</h2>
 <p>
-ESP32-C6搭載の小型LCD表示機「movdice」に対して、USB経由（<a href="https://developer.mozilla.org/docs/Web/API/Web_Serial_API" target="_blank" rel="noopener">Web Serial API</a>）でブラウザから直接、以下を行えるようにするためのツール（開発中）。
+ESP32-C6搭載の小型LCD表示機「movdice」に対して、USB経由（<a href="https://developer.mozilla.org/docs/Web/API/Web_Serial_API" target="_blank" rel="noopener">Web Serial API</a>）でブラウザから直接、以下を行えるようにするためのツール。
 </p>
 <ul>
   <li>画像のアップロード（PNG→ESP32用フォーマットへの変換はすべてブラウザ側で完結させる）</li>
-  <li>アップロード済み画像の一覧・削除</li>
-  <li>表示プリセットの設定・保存</li>
+  <li>アップロード済み画像の一覧・削除（画像プール管理）</li>
+  <li>キャラ（プリセット）ごとの画像構成・表示頻度・primaryの設定</li>
   <li>動作確認用のテスト表示</li>
   <li>再起動</li>
 </ul>
@@ -35,21 +33,22 @@ ESP32-C6搭載の小型LCD表示機「movdice」に対して、USB経由（<a hr
   <li>ハードウェア: Waveshare ESP32-C6-LCD-1.47（ST7789V3液晶、非タッチ/タッチの2モデルあり）</li>
   <li>ファームウェア: MicroPython</li>
   <li>通常動作: あらかじめ設定された画像セットをスライドショー表示する専用機</li>
-  <li>設定変更: 起動直後にBOOTボタンを押すと設定モードに入り、このページから直接USB経由で設定できる</li>
+  <li>設定変更: 起動直後にPWR(BOOT)ボタンを押すと設定モードに入り、このツールから直接USB経由で設定できる</li>
 </ul>
 
 <h2>なぜこの構成になっているか</h2>
 <ul>
-  <li>画像変換にはリサイズ・圧縮処理が必要だが、ESP32側（MicroPython）にPillow相当のライブラリは載せられない。そのため変換処理はすべてこのページ（ブラウザのJavaScript）側で行う。</li>
+  <li>画像変換にはリサイズ・圧縮処理が必要だが、ESP32側（MicroPython）にPillow相当のライブラリは載せられない。そのため変換処理はすべてこのページ（ブラウザのTypeScript）側で行う。</li>
   <li>ESP32-C6のUSBは固定機能のCDCシリアルのみで、汎用USB OTGペリフェラルを持たない。そのためUSBドライブとして見せる方式（USB Mass Storage化）は採用できず、Web Serial APIによるシリアル通信を選んでいる。</li>
   <li>配布先のユーザーにThonny等の専用アプリのインストールを求めないことを目標にしている。</li>
+  <li>設定モードのUSBシリアルは独自バイナリプロトコル専用とし、MicroPythonの標準コンソール(REPL)は使わない。WiFi搭載機であるため、任意コード実行の経路を製品に残さないための設計判断。</li>
 </ul>
 
 <h2>技術スタック</h2>
 <table>
   <tr><th>項目</th><th>内容</th></tr>
-  <tr><td>通信</td><td>Web Serial API</td></tr>
-  <tr><td>画像変換</td><td>ブラウザ内JavaScript（PNG→RGB565変換→RLE圧縮）</td></tr>
+  <tr><td>通信</td><td>Web Serial API（独自バイナリプロトコル）</td></tr>
+  <tr><td>画像変換</td><td>ブラウザ内TypeScript（PNG→RGB565変換→RLE圧縮）</td></tr>
   <tr><td>ESP32側ファームウェア</td><td>MicroPython</td></tr>
 </table>
 
@@ -58,5 +57,6 @@ ESP32-C6搭載の小型LCD表示機「movdice」に対して、USB経由（<a hr
 このリポジトリはこのページのソースそのもの（GitHub Pagesで公開）。ESP32側のファームウェアや画像変換スクリプトなど、movdiceの開発一式は別のリポジトリで管理している。
 </p>
 
+</main>
 </body>
 </html>

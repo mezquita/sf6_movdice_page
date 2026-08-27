@@ -2,86 +2,106 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>movdice 設定（画像プレビュー実験）</title>
+<title>movdice 設定</title>
+<link rel="stylesheet" href="./pico.min.css">
 <style>
-  body { font-family: sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
   #status { padding: 0.75rem; border-radius: 6px; margin: 1rem 0; }
-  .status-none { background: #eee; }
+  .status-none { background: var(--pico-secondary-background); }
   .status-connected { background: #d4edda; color: #155724; }
   .status-error { background: #f8d7da; color: #721c24; }
-  button { padding: 0.5rem 1rem; margin-right: 0.5rem; margin-bottom: 0.5rem; }
-  #log { font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; background: #f5f5f5; padding: 0.5rem; height: 150px; overflow-y: auto; }
-  #loadStatus { margin: 1rem 0; color: #555; }
+  .hint { font-size: 0.85rem; color: var(--pico-muted-color); }
+  #log { font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; background: var(--pico-code-background-color); padding: 0.5rem; height: 150px; overflow-y: auto; border-radius: 6px; }
+  #loadStatus { margin: 1rem 0; color: var(--pico-muted-color); }
   .set-section { margin: 1.5rem 0; }
   .set-section h3 { margin-bottom: 0.5rem; }
   .thumb-row { display: flex; flex-wrap: wrap; gap: 0.6rem; }
   .thumb { width: 110px; }
-  .thumb img { width: 100%; border: 1px solid #ccc; border-radius: 4px; display: block; }
+  .thumb img { width: 100%; border: 1px solid var(--pico-muted-border-color); border-radius: 4px; display: block; }
   .thumb .caption { font-size: 0.75rem; text-align: center; margin-top: 0.2rem; word-break: break-all; }
   .thumb .delBtn { width: 100%; font-size: 0.7rem; padding: 0.15rem 0; margin-top: 0.2rem; }
-  #uploadBox, #debugBox, #poolBox { margin: 1rem 0; padding: 0.75rem; border: 1px dashed #ccc; border-radius: 6px; }
-  #uploadBox input[type="text"] { width: 180px; }
+  #uploadBox, #debugBox, #poolBox, #addSetBox { margin: 1rem 0; padding: 0.75rem; border: 1px dashed var(--pico-muted-border-color); border-radius: 6px; }
+  #uploadBox input[type="text"] { width: 180px; display: inline-block; }
   .usedBy { font-size: 0.7rem; color: #c0392b; text-align: center; margin-top: 0.2rem; }
-  #storageInfo { margin: 1rem 0; padding: 0.6rem 0.75rem; background: #f5f5f5; border-radius: 6px; font-size: 0.85rem; }
-  #storageBar { height: 8px; background: #ddd; border-radius: 4px; overflow: hidden; margin-top: 0.4rem; }
-  #storageBarFill { height: 100%; background: #4a90d9; }
+  #storageInfo { margin: 1rem 0; padding: 0.6rem 0.75rem; background: var(--pico-card-background-color); border-radius: 6px; font-size: 0.85rem; }
+  #storageBar { height: 8px; background: var(--pico-muted-border-color); border-radius: 4px; overflow: hidden; margin-top: 0.4rem; }
+  #storageBarFill { height: 100%; background: var(--pico-primary); }
   #storageBarFill.warn { background: #e0a800; }
   #storageBarFill.danger { background: #d9534f; }
+  .toolbar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 1rem 0; }
+  .toolbar button { margin: 0; width: auto; }
+  #saveStatus { color: #155724; font-weight: bold; }
+  nav.tabs { display: flex; gap: 0.5rem; margin: 1.5rem 0 1rem; border-bottom: 1px solid var(--pico-muted-border-color); padding-bottom: 0.5rem; }
+  nav.tabs button { margin: 0; width: auto; }
+  nav.tabs button.tab-inactive { background: transparent; color: var(--pico-muted-color); border-color: transparent; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
 </style>
 </head>
 <body>
-<p><a href="./index.html">&larr; 接続実験ページに戻る</a></p>
-<h1>movdice 設定（画像プレビュー実験）</h1>
-<p id="buildVersion" style="font-size: 0.75rem; color: #888;"></p>
+<main class="container">
+
+<p><a href="./index.html">&larr; 接続ページに戻る</a></p>
+<h1>movdice 設定</h1>
+<p id="buildVersion" class="hint"></p>
 
 <div id="status" class="status-none">未接続</div>
+<p class="hint">接続できていない場合は、<a href="./index.html">接続ページ</a>で先に接続してください。</p>
 
-<button id="connectBtn">ESP32に接続</button>
-<button id="forgetBtn" disabled>アクセスを取り消す</button>
-<button id="helloBtn" disabled>hello（疎通確認、設定モードで実行してください）</button>
-<button id="loadNewBtn" disabled>画像一覧を読み込む（設定モードで実行してください）</button>
-<button id="saveBtn" disabled>設定を反映</button>
-<span id="saveStatus" style="color: #155724; font-weight: bold;"></span>
-<button id="rebootBtn" disabled>再起動</button>
+<div class="toolbar">
+  <button id="loadNewBtn" disabled>画像一覧を読み込む（設定モードで実行してください）</button>
+  <button id="saveBtn" disabled>設定を反映</button>
+  <span id="saveStatus"></span>
+  <button id="rebootBtn" class="secondary" disabled>再起動</button>
+</div>
 
 <div id="storageInfo"></div>
 
-<div id="uploadBox">
-  <strong>画像アップロード</strong><br>
-  <input type="file" id="uploadFile" accept="image/png" disabled>
-  <input type="text" id="uploadFilename" placeholder="ファイル名（省略時は元ファイル名から自動生成）" disabled>
-  <button id="uploadBtn" disabled>アップロード</button>
+<nav class="tabs">
+  <button id="tabPoolBtn" data-tab="pool">画像プール管理</button>
+  <button id="tabCharBtn" data-tab="char">キャラ管理</button>
+</nav>
+
+<div id="tabPool" class="tab-panel">
+  <div id="uploadBox">
+    <strong>画像アップロード</strong><br>
+    <input type="file" id="uploadFile" accept="image/png" disabled>
+    <input type="text" id="uploadFilename" placeholder="ファイル名（省略時は元ファイル名から自動生成）" disabled>
+    <button id="uploadBtn" disabled>アップロード</button>
+  </div>
+
+  <div id="poolBox">
+    <strong>画像プール一覧</strong><br>
+    <p class="hint">
+      アップロード済みの全画像（どのプリセットからも独立した実体）。ここでの削除は<strong>実ファイルの完全削除</strong>で、
+      使用中のプリセットにも影響します。
+    </p>
+    <button id="loadPoolBtn" disabled>プール一覧を読み込む</button>
+    <div id="poolStatus"></div>
+    <div id="poolList" class="thumb-row"></div>
+  </div>
+
+  <div id="debugBox">
+    <strong>デバッグ: 任意サイズのダミーデータ送信テスト</strong><br>
+    <input type="number" id="testSize" value="100" style="width: 100px;" disabled>
+    <button id="testUploadBtn" disabled>テスト送信</button>
+  </div>
 </div>
 
-<div id="loadStatus"></div>
-<div id="sets"></div>
+<div id="tabChar" class="tab-panel">
+  <div id="loadStatus"></div>
+  <div id="sets"></div>
 
-<div id="uploadBox">
-  <strong>新しいキャラを追加</strong><br>
-  <input type="text" id="newSetName" placeholder="キャラ名（例: chunli）" disabled>
-  <button id="addSetBtn" disabled>キャラを追加</button>
-</div>
-
-<div id="poolBox">
-  <strong>画像プール管理</strong><br>
-  <p style="font-size: 0.85rem; color: #555; margin: 0.3rem 0;">
-    アップロード済みの全画像（どのプリセットからも独立した実体）。ここでの削除は<strong>実ファイルの完全削除</strong>で、
-    使用中のプリセットにも影響します。
-  </p>
-  <button id="loadPoolBtn" disabled>プール一覧を読み込む</button>
-  <div id="poolStatus"></div>
-  <div id="poolList" class="thumb-row"></div>
-</div>
-
-<div id="debugBox">
-  <strong>デバッグ: 任意サイズのダミーデータ送信テスト</strong><br>
-  <input type="number" id="testSize" value="100" style="width: 100px;" disabled>
-  <button id="testUploadBtn" disabled>テスト送信</button>
+  <div id="addSetBox">
+    <strong>新しいキャラを追加</strong><br>
+    <input type="text" id="newSetName" placeholder="キャラ名（例: chunli）" disabled>
+    <button id="addSetBtn" disabled>キャラを追加</button>
+  </div>
 </div>
 
 <h2>ログ <button id="copyLogBtn" style="font-size: 0.7rem; padding: 0.2rem 0.6rem;">コピー</button></h2>
 <div id="log"></div>
 
+</main>
 <script type="module" src="./dist/config.js"></script>
 </body>
 </html>

@@ -1,11 +1,8 @@
 import { MovSerial } from './serial.js';
 import { decodeRleToRgba, decodeRawToRgba, rgbaToDataUrl, pngFileToRgb565Rle } from './imageDecode.js';
-import { hello, listImages, getImage, getPresets, savePresets, uploadImage, deleteImage, getStorageInfo, testDisplay, reboot, } from './protocol.js';
+import { listImages, getImage, getPresets, savePresets, uploadImage, deleteImage, getStorageInfo, testDisplay, reboot, } from './protocol.js';
 import { BUILD_VERSION } from './version.js';
 const statusEl = document.getElementById('status');
-const connectBtn = document.getElementById('connectBtn');
-const forgetBtn = document.getElementById('forgetBtn');
-const helloBtn = document.getElementById('helloBtn');
 const loadNewBtn = document.getElementById('loadNewBtn');
 const saveBtn = document.getElementById('saveBtn');
 const saveStatusEl = document.getElementById('saveStatus');
@@ -26,7 +23,22 @@ const poolStatusEl = document.getElementById('poolStatus');
 const poolListEl = document.getElementById('poolList');
 const newSetNameInput = document.getElementById('newSetName');
 const addSetBtn = document.getElementById('addSetBtn');
+const tabPoolBtn = document.getElementById('tabPoolBtn');
+const tabCharBtn = document.getElementById('tabCharBtn');
+const tabPoolEl = document.getElementById('tabPool');
+const tabCharEl = document.getElementById('tabChar');
 buildVersionEl.textContent = 'hash: ' + BUILD_VERSION;
+// --- タブ切り替え（ページ遷移なし。接続状態を保ったまま画面を切り替えるため） ---
+function showTab(tab) {
+    const isPool = tab === 'pool';
+    tabPoolEl.classList.toggle('active', isPool);
+    tabCharEl.classList.toggle('active', !isPool);
+    tabPoolBtn.classList.toggle('tab-inactive', !isPool);
+    tabCharBtn.classList.toggle('tab-inactive', isPool);
+}
+tabPoolBtn.addEventListener('click', () => showTab('pool'));
+tabCharBtn.addEventListener('click', () => showTab('char'));
+showTab('pool');
 function formatBytes(n) {
     return (n / 1024).toFixed(1) + ' KB';
 }
@@ -86,8 +98,6 @@ function setLoadStatus(text) {
 MovSerial.setDebugLogger(log);
 function refreshUi() {
     const connected = MovSerial.isConnected();
-    forgetBtn.disabled = !connected;
-    helloBtn.disabled = !connected;
     loadNewBtn.disabled = !connected;
     saveBtn.disabled = !connected;
     rebootBtn.disabled = !connected;
@@ -135,22 +145,9 @@ rebootBtn.addEventListener('click', async () => {
     }
     rebootBtn.disabled = false;
 });
-helloBtn.addEventListener('click', async () => {
-    helloBtn.disabled = true;
-    try {
-        log('helloを送信します。');
-        const meta = await hello();
-        log('hello応答: ' + JSON.stringify(meta));
-    }
-    catch (e) {
-        log('hello失敗: ' + e.message);
-    }
-    helloBtn.disabled = false;
-});
 async function tryAutoConnect() {
     if (!MovSerial.isSupported()) {
         setStatus('このブラウザはWeb Serial APIに対応していません（Chrome/Edgeを使ってください）', 'status-error');
-        connectBtn.disabled = true;
         return;
     }
     const found = await MovSerial.getRememberedPort();
@@ -167,29 +164,9 @@ async function tryAutoConnect() {
         refreshUi();
     }
     else {
-        log('許可済みデバイスはありません。「ESP32に接続」を押してください。');
+        log('許可済みデバイスがありません。接続ページで先に接続してください。');
     }
 }
-connectBtn.addEventListener('click', async () => {
-    try {
-        const p = await MovSerial.requestNewPort();
-        log('デバイスが選択されました。');
-        await MovSerial.connect(p);
-        log('ポートをopenしました。');
-    }
-    catch (e) {
-        setStatus('接続エラー: ' + e.message, 'status-error');
-        log('接続失敗: ' + e.message);
-    }
-    refreshUi();
-});
-forgetBtn.addEventListener('click', async () => {
-    await MovSerial.disconnectAndForget();
-    log('アクセスを取り消しました。');
-    setsEl.innerHTML = '';
-    setLoadStatus('');
-    refreshUi();
-});
 // --- 画像読み込み・プリセット編集 ---
 // 変更(頻度・追加・削除・primary)はすべてローカルの currentImagesData を書き換えるだけに留め、
 // 実際にESP32へ書き込むのは「設定を反映」ボタン(saveBtn)を押した時だけ。

@@ -1,9 +1,11 @@
 import { MovSerial } from './serial.js';
+import { hello } from './protocol.js';
 import { BUILD_VERSION } from './version.js';
 
 const statusEl = document.getElementById('status') as HTMLDivElement;
 const connectBtn = document.getElementById('connectBtn') as HTMLButtonElement;
 const forgetBtn = document.getElementById('forgetBtn') as HTMLButtonElement;
+const helloBtn = document.getElementById('helloBtn') as HTMLButtonElement;
 const logEl = document.getElementById('log') as HTMLDivElement;
 const copyLogBtn = document.getElementById('copyLogBtn') as HTMLButtonElement;
 const buildVersionEl = document.getElementById('buildVersion') as HTMLParagraphElement;
@@ -15,6 +17,8 @@ function log(msg: string): void {
   logEl.textContent += `[${time}] ${msg}\n`;
   logEl.scrollTop = logEl.scrollHeight;
 }
+
+MovSerial.setDebugLogger(log);
 
 copyLogBtn.addEventListener('click', async () => {
   try {
@@ -36,7 +40,9 @@ function setStatus(text: string, cls: string): void {
 
 function refreshUi(): void {
   const connected = MovSerial.isConnected();
-  forgetBtn.disabled = !connected;
+  connectBtn.hidden = connected;
+  forgetBtn.hidden = !connected;
+  helloBtn.hidden = !connected;
   setStatus(connected ? '接続済み（許可済み）' : '未接続', connected ? 'status-connected' : 'status-none');
 }
 
@@ -79,6 +85,18 @@ forgetBtn.addEventListener('click', async () => {
   await MovSerial.disconnectAndForget();
   log('アクセスを取り消しました。');
   refreshUi();
+});
+
+helloBtn.addEventListener('click', async () => {
+  helloBtn.disabled = true;
+  try {
+    log('helloを送信します（設定モードで実行してください）。');
+    const meta = await hello();
+    log('hello応答: ' + JSON.stringify(meta));
+  } catch (e) {
+    log('hello失敗: ' + (e as Error).message);
+  }
+  helloBtn.disabled = false;
 });
 
 tryAutoConnect();

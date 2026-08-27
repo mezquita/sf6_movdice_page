@@ -2,21 +2,23 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>movdice 接続実験</title>
+<title>movdice 接続</title>
+<link rel="stylesheet" href="./pico.min.css">
 <style>
-  body { font-family: sans-serif; max-width: 480px; margin: 2rem auto; padding: 0 1rem; }
   #status { padding: 0.75rem; border-radius: 6px; margin: 1rem 0; }
-  .status-none { background: #eee; }
+  .status-none { background: var(--pico-secondary-background); }
   .status-connected { background: #d4edda; color: #155724; }
   .status-error { background: #f8d7da; color: #721c24; }
-  button { padding: 0.5rem 1rem; margin-right: 0.5rem; }
-  #log { font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; background: #f5f5f5; padding: 0.5rem; height: 200px; overflow-y: auto; }
+  #log { font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; background: var(--pico-code-background-color); padding: 0.5rem; height: 200px; overflow-y: auto; border-radius: 6px; }
+  .hint { font-size: 0.85rem; color: var(--pico-muted-color); }
 </style>
 </head>
 <body>
-<h1>movdice 接続実験</h1>
-<p id="buildVersion" style="font-size: 0.75rem; color: #888;"></p>
-<p>ESP32との接続だけを試す実験用ページ。Chrome/Edgeでのみ動作します。</p>
+<main class="container">
+
+<h1>movdice 接続</h1>
+<p id="buildVersion" style="font-size: 0.75rem; color: var(--pico-muted-color);"></p>
+<p>ESP32とブラウザをUSB接続するためのページ。Chrome/Edgeでのみ動作します。</p>
 <p>
   <a href="./about.html">このツールについて（概要・技術スタック）</a><br>
   <a href="./config.html">画像・プリセットの設定画面へ</a>
@@ -25,11 +27,14 @@
 <div id="status" class="status-none">未接続</div>
 
 <button id="connectBtn">ESP32に接続</button>
-<button id="forgetBtn" disabled>アクセスを取り消す</button>
+<button id="forgetBtn" class="secondary" hidden>アクセスを取り消す</button>
+<button id="helloBtn" hidden>hello（接続確認）</button>
+<p class="hint">接続できたら、まず「hello」を押して設定モードと疎通できているか確認してください。</p>
 
 <h2>ログ <button id="copyLogBtn" style="font-size: 0.7rem; padding: 0.2rem 0.6rem;">コピー</button></h2>
 <div id="log"></div>
 
+</main>
 <script type="module" src="./dist/index.js"></script>
 </body>
 </html>
