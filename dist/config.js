@@ -1,6 +1,6 @@
 import { MovSerial } from './serial.js';
 import { base64ToBytes, decodeRleToRgba, decodeRawToRgba, rgbaToDataUrl, pngFileToRgb565Rle } from './imageDecode.js';
-import { hello, listImages, getImage, getPresets, uploadImage, deleteImage, getStorageInfo } from './protocol.js';
+import { hello, listImages, getImage, getPresets, savePresets, uploadImage, getStorageInfo } from './protocol.js';
 import { BUILD_VERSION } from './version.js';
 const statusEl = document.getElementById('status');
 const connectBtn = document.getElementById('connectBtn');
@@ -176,7 +176,7 @@ async function fetchRawFileBase64(filename) {
     const code = `import binascii\nprint(binascii.b2a_base64(open('img/${safe}','rb').read()).decode())`;
     return await MovSerial.execRaw(code);
 }
-function renderSets(imagesData, cache, onDelete) {
+function renderSets(imagesData, cache, onRemoveFromSet) {
     setsEl.innerHTML = '';
     for (const setName of Object.keys(imagesData.sets)) {
         const section = document.createElement('div');
@@ -197,11 +197,11 @@ function renderSets(imagesData, cache, onDelete) {
             caption.textContent = filename.replace(/\.raw$/, '');
             wrap.appendChild(img);
             wrap.appendChild(caption);
-            if (onDelete) {
+            if (onRemoveFromSet) {
                 const delBtn = document.createElement('button');
                 delBtn.className = 'delBtn';
-                delBtn.textContent = '削除';
-                delBtn.addEventListener('click', () => onDelete(filename));
+                delBtn.textContent = 'このセットから外す';
+                delBtn.addEventListener('click', () => onRemoveFromSet(setName, filename));
                 wrap.appendChild(delBtn);
             }
             row.appendChild(wrap);
@@ -251,12 +251,14 @@ loadBtn.addEventListener('click', async () => {
     }
     loadBtn.disabled = false;
 });
+let currentImagesData = null;
 async function loadWithNewProtocol() {
     loadNewBtn.disabled = true;
     try {
         setLoadStatus('新プロトコルでプリセットを取得しています...');
         const imagesData = await getPresets();
         log('プリセット取得完了: ' + JSON.stringify(imagesData));
+        currentImagesData = imagesData;
         const filenames = await listImages();
         log('画像一覧: ' + JSON.stringify(filenames));
         const cache = new Map();
@@ -270,7 +272,7 @@ async function loadWithNewProtocol() {
             done++;
             log(`${filename} 取得完了 (${bytes.length} bytes)`);
         }
-        renderSets(imagesData, cache, handleDeleteClick);
+        renderSets(imagesData, cache, handleRemoveFromSet);
         setLoadStatus(`完了（${total}枚、新プロトコル）`);
         await refreshStorageInfo();
     }
@@ -280,16 +282,24 @@ async function loadWithNewProtocol() {
     }
     loadNewBtn.disabled = false;
 }
-async function handleDeleteClick(filename) {
-    if (!confirm(`${filename} を削除しますか？`))
+// プレビュー画面の「このセットから外す」操作: プール(img/)の実ファイルには触れず、
+// そのセットの選択情報(images.jsonのsets)からキーを外して保存するだけ。
+async function handleRemoveFromSet(setName, filename) {
+    if (!currentImagesData)
+        return;
+    if (!confirm(`「${setName}」から ${filename} を外しますか？（画像自体は削除されません）`))
         return;
     try {
-        await deleteImage(filename);
-        log(`${filename} を削除しました。`);
+        delete currentImagesData.sets[setName][filename];
+        const result = await savePresets(currentImagesData);
+        log(`「${setName}」から ${filename} を外しました。`);
+        if (result.warning) {
+            log('警告: ' + result.warning);
+        }
         await loadWithNewProtocol();
     }
     catch (e) {
-        log('削除失敗: ' + e.message);
+        log('保存失敗: ' + e.message);
     }
 }
 loadNewBtn.addEventListener('click', loadWithNewProtocol);

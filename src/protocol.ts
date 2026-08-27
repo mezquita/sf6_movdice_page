@@ -85,6 +85,12 @@ export async function getPresets(): Promise<ImagesJson> {
   return JSON.parse(text) as ImagesJson;
 }
 
+export async function savePresets(data: ImagesJson): Promise<{ warning?: string }> {
+  const body = new TextEncoder().encode(JSON.stringify(data));
+  const res = await sendCommand('save_presets', {}, body);
+  return { warning: res.meta.warning as string | undefined };
+}
+
 export async function uploadImage(filename: string, data: Uint8Array): Promise<void> {
   await sendCommand('upload_image', { filename }, data);
 }

@@ -58,6 +58,11 @@ export async function getPresets() {
     const text = new TextDecoder().decode(res.body);
     return JSON.parse(text);
 }
+export async function savePresets(data) {
+    const body = new TextEncoder().encode(JSON.stringify(data));
+    const res = await sendCommand('save_presets', {}, body);
+    return { warning: res.meta.warning };
+}
 export async function uploadImage(filename, data) {
     await sendCommand('upload_image', { filename }, data);
 }
