@@ -1,45 +1,23 @@
 import { MovSerial } from './serial.js';
 import { hello } from './protocol.js';
-import { BUILD_VERSION } from './version.js';
-const statusEl = document.getElementById('status');
+import { log, setStatus } from './ui.js';
 const connectBtn = document.getElementById('connectBtn');
 const forgetBtn = document.getElementById('forgetBtn');
 const helloBtn = document.getElementById('helloBtn');
-const logEl = document.getElementById('log');
-const copyLogBtn = document.getElementById('copyLogBtn');
-const buildVersionEl = document.getElementById('buildVersion');
-buildVersionEl.textContent = 'hash: ' + BUILD_VERSION;
-function log(msg) {
-    const time = new Date().toLocaleTimeString();
-    logEl.textContent += `[${time}] ${msg}\n`;
-    logEl.scrollTop = logEl.scrollHeight;
+let onChangeCallback = null;
+// 接続状態が変わるたびに、他のタブ(pool/char)のボタン活性状態も更新できるよう通知する
+export function onConnectionChange(cb) {
+    onChangeCallback = cb;
 }
-MovSerial.setDebugLogger(log);
-copyLogBtn.addEventListener('click', async () => {
-    try {
-        await navigator.clipboard.writeText(logEl.textContent || '');
-        const original = copyLogBtn.textContent;
-        copyLogBtn.textContent = 'コピーしました';
-        setTimeout(() => {
-            copyLogBtn.textContent = original;
-        }, 1500);
-    }
-    catch (e) {
-        log('クリップボードへのコピーに失敗: ' + e.message);
-    }
-});
-function setStatus(text, cls) {
-    statusEl.textContent = text;
-    statusEl.className = cls;
-}
-function refreshUi() {
+export function refreshUi() {
     const connected = MovSerial.isConnected();
     connectBtn.hidden = connected;
     forgetBtn.hidden = !connected;
     helloBtn.hidden = !connected;
     setStatus(connected ? '接続済み（許可済み）' : '未接続', connected ? 'status-connected' : 'status-none');
+    onChangeCallback?.();
 }
-async function tryAutoConnect() {
+export async function tryAutoConnect() {
     if (!MovSerial.isSupported()) {
         setStatus('このブラウザはWeb Serial APIに対応していません（Chrome/Edgeを使ってください）', 'status-error');
         connectBtn.disabled = true;
@@ -92,4 +70,3 @@ helloBtn.addEventListener('click', async () => {
     }
     helloBtn.disabled = false;
 });
-tryAutoConnect();

@@ -2,39 +2,152 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>movdice 接続</title>
+<title>movdice 設定</title>
 <link rel="stylesheet" href="./pico.min.css">
 <style>
-  #status { padding: 0.75rem; border-radius: 6px; margin: 1rem 0; }
+  #status { padding: 0.75rem; text-align: center; }
   .status-none { background: var(--pico-secondary-background); }
   .status-connected { background: #d4edda; color: #155724; }
   .status-error { background: #f8d7da; color: #721c24; }
-  #log { font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; background: var(--pico-code-background-color); padding: 0.5rem; height: 200px; overflow-y: auto; border-radius: 6px; }
   .hint { font-size: 0.85rem; color: var(--pico-muted-color); }
+  #log { font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; background: var(--pico-code-background-color); padding: 0.5rem; height: 150px; overflow-y: auto; border-radius: 6px; }
+  #loadStatus { margin: 1rem 0; color: var(--pico-muted-color); }
+  .set-section { margin: 1.5rem 0; }
+  .set-section h3 { margin-bottom: 0.5rem; }
+  .thumb-row { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+  .thumb { width: 110px; }
+  .thumb img { width: 100%; border: 1px solid var(--pico-muted-border-color); border-radius: 4px; display: block; }
+  .thumb .caption { font-size: 0.75rem; text-align: center; margin-top: 0.2rem; word-break: break-all; }
+  .thumb .delBtn { width: 100%; font-size: 0.7rem; padding: 0.15rem 0; margin-top: 0.2rem; }
+  #uploadBox, #debugBox, #poolBox, #addSetBox { margin: 1rem 0; padding: 0.75rem; border: 1px dashed var(--pico-muted-border-color); border-radius: 6px; }
+  .uploadRow { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 0.5rem 0; }
+  .uploadRow input, .uploadRow button { margin: 0; width: auto; }
+  .uploadRow input[type="text"] { width: 180px; }
+  .usedBy { font-size: 0.7rem; color: #c0392b; text-align: center; margin-top: 0.2rem; }
+  #storageInfo { margin: 1rem 0; padding: 0.6rem 0.75rem; background: var(--pico-card-background-color); border-radius: 6px; font-size: 0.85rem; }
+  #storageBar { height: 8px; background: var(--pico-muted-border-color); border-radius: 4px; overflow: hidden; margin-top: 0.4rem; }
+  #storageBarFill { height: 100%; background: var(--pico-primary); }
+  #storageBarFill.warn { background: #e0a800; }
+  #storageBarFill.danger { background: #d9534f; }
+  .toolbar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 1rem 0; }
+  .toolbar button { margin: 0; width: auto; }
+  #saveStatus { color: #155724; font-weight: bold; }
+  nav.tabs { display: flex; gap: 0.5rem; margin: 1.5rem 0 1rem; border-bottom: 1px solid var(--pico-muted-border-color); padding-bottom: 0.5rem; flex-wrap: wrap; }
+  nav.tabs button { margin: 0; width: auto; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
 </style>
 </head>
 <body>
-<main class="container">
-
-<h1>movdice 接続</h1>
-<p id="buildVersion" style="font-size: 0.75rem; color: var(--pico-muted-color);"></p>
-<p>ESP32とブラウザをUSB接続するためのページ。Chrome/Edgeでのみ動作します。</p>
-<p>
-  <a href="./about.html">このツールについて（概要・技術スタック）</a><br>
-  <a href="./config.html">画像・プリセットの設定画面へ</a>
-</p>
 
 <div id="status" class="status-none">未接続</div>
 
-<button id="connectBtn">ESP32に接続</button>
-<button id="forgetBtn" class="secondary" hidden>アクセスを取り消す</button>
-<button id="helloBtn" hidden>hello（接続確認）</button>
-<p class="hint">接続できたら、まず「hello」を押して設定モードと疎通できているか確認してください。</p>
+<main class="container">
+
+<h1>movdice 設定</h1>
+<p id="buildVersion" class="hint"></p>
+<p><a href="./about.html">このツールについて（概要・技術スタック）</a></p>
+
+<nav class="tabs">
+  <button id="tabConnBtn" data-tab="conn">接続</button>
+  <button id="tabPoolBtn" data-tab="pool">画像プール管理</button>
+  <button id="tabCharBtn" data-tab="char">キャラ管理</button>
+  <button id="tabHelpBtn" data-tab="help">使用方法</button>
+</nav>
+
+<div id="tabConn" class="tab-panel">
+  <button id="connectBtn">ESP32に接続</button>
+  <button id="forgetBtn" class="secondary" hidden>アクセスを取り消す</button>
+  <button id="helloBtn" hidden>hello（接続確認）</button>
+  <p class="hint">接続できたら、まず「hello」を押して設定モードと疎通できているか確認してください。</p>
+</div>
+
+<div class="toolbar">
+  <button id="loadNewBtn" disabled>画像一覧を読み込む（設定モードで実行してください）</button>
+  <button id="saveBtn" disabled>設定を反映</button>
+  <span id="saveStatus"></span>
+  <button id="rebootBtn" class="secondary" disabled>再起動</button>
+</div>
+
+<div id="storageInfo"></div>
+
+<div id="tabPool" class="tab-panel">
+  <div id="uploadBox">
+    <strong>画像アップロード</strong>
+    <div class="uploadRow">
+      <input type="file" id="uploadFile" accept="image/png" disabled>
+      <input type="text" id="uploadFilename" placeholder="ファイル名" disabled>
+      <button id="uploadBtn" disabled>アップロード</button>
+    </div>
+    <p class="hint">※ファイル名省略時は元ファイル名から自動生成</p>
+  </div>
+
+  <div id="poolBox">
+    <strong>画像プール一覧</strong><br>
+    <p class="hint">
+      アップロード済みの全画像（どのプリセットからも独立した実体）。ここでの削除は<strong>実ファイルの完全削除</strong>で、
+      使用中のプリセットにも影響します。
+    </p>
+    <button id="loadPoolBtn" disabled>プール一覧を読み込む</button>
+    <div id="poolStatus"></div>
+    <div id="poolList" class="thumb-row"></div>
+  </div>
+
+  <div id="debugBox" hidden>
+    <strong>デバッグ: 任意サイズのダミーデータ送信テスト</strong><br>
+    <input type="number" id="testSize" value="100" style="width: 100px;" disabled>
+    <button id="testUploadBtn" disabled>テスト送信</button>
+  </div>
+</div>
+
+<div id="tabChar" class="tab-panel">
+  <div id="loadStatus"></div>
+  <div id="sets"></div>
+
+  <div id="addSetBox">
+    <strong>新しいキャラを追加</strong><br>
+    <input type="text" id="newSetName" placeholder="キャラ名（例: chunli）" pattern="[A-Za-z0-9.\-]+" disabled>
+    <button id="addSetBtn" disabled>キャラを追加</button>
+    <p class="hint">※キャラ名は半角英数字・ハイフン(-)・ピリオド(.)のみ使用できます</p>
+  </div>
+</div>
+
+<div id="tabHelp" class="tab-panel">
+  <h3>1. 初めての接続</h3>
+  <ol>
+    <li>ESP32をUSBケーブルでPCに接続する</li>
+    <li>上の「接続」タブを開く</li>
+    <li>「ESP32に接続」を押し、表示されたデバイスを選択する</li>
+    <li>「hello」を押して応答が返ってくれば接続成功</li>
+  </ol>
+
+  <h3>2. 設定モードに入る</h3>
+  <ol>
+    <li>ESP32をリセットする（電源再投入、またはRSTボタン）</li>
+    <li>LCDに「BOOT=CONFIG MODE」のカウントダウンが出ている間に、PWR(BOOT)ボタンを押す</li>
+    <li>LCD画面が黄色背景の「CONFIG MODE」表示に変われば設定モードに入っている</li>
+  </ol>
+
+  <h3>3. 画像・キャラの設定</h3>
+  <ol>
+    <li>「画像一覧を読み込む」を押す</li>
+    <li>「画像プール管理」タブで画像をアップロード・削除する</li>
+    <li>「キャラ管理」タブでキャラごとの画像構成・頻度・primaryを編集する</li>
+    <li>「設定を反映」を押して保存する</li>
+    <li>「再起動」を押すと、設定を反映した状態で通常のスライドショーが始まる</li>
+  </ol>
+
+  <h3>うまくいかない時</h3>
+  <ul>
+    <li>接続エラーが出る・再起動が不安定になる場合は、リセットとPWR(BOOT)ボタンを押すタイミングを見直してみてください</li>
+    <li>Thonny等、他のツールでESP32に接続したままだと、ブラウザからは接続できません</li>
+  </ul>
+</div>
 
 <h2>ログ <button id="copyLogBtn" style="font-size: 0.7rem; padding: 0.2rem 0.6rem;">コピー</button></h2>
 <div id="log"></div>
 
 </main>
-<script type="module" src="./dist/index.js"></script>
+<script type="module" src="./dist/app.js"></script>
 </body>
 </html>

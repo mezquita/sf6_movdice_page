@@ -1,52 +1,28 @@
 import { MovSerial } from './serial.js';
 import { hello } from './protocol.js';
-import { BUILD_VERSION } from './version.js';
+import { log, setStatus } from './ui.js';
 
-const statusEl = document.getElementById('status') as HTMLDivElement;
 const connectBtn = document.getElementById('connectBtn') as HTMLButtonElement;
 const forgetBtn = document.getElementById('forgetBtn') as HTMLButtonElement;
 const helloBtn = document.getElementById('helloBtn') as HTMLButtonElement;
-const logEl = document.getElementById('log') as HTMLDivElement;
-const copyLogBtn = document.getElementById('copyLogBtn') as HTMLButtonElement;
-const buildVersionEl = document.getElementById('buildVersion') as HTMLParagraphElement;
 
-buildVersionEl.textContent = 'hash: ' + BUILD_VERSION;
+let onChangeCallback: (() => void) | null = null;
 
-function log(msg: string): void {
-  const time = new Date().toLocaleTimeString();
-  logEl.textContent += `[${time}] ${msg}\n`;
-  logEl.scrollTop = logEl.scrollHeight;
+// 接続状態が変わるたびに、他のタブ(pool/char)のボタン活性状態も更新できるよう通知する
+export function onConnectionChange(cb: () => void): void {
+  onChangeCallback = cb;
 }
 
-MovSerial.setDebugLogger(log);
-
-copyLogBtn.addEventListener('click', async () => {
-  try {
-    await navigator.clipboard.writeText(logEl.textContent || '');
-    const original = copyLogBtn.textContent;
-    copyLogBtn.textContent = 'コピーしました';
-    setTimeout(() => {
-      copyLogBtn.textContent = original;
-    }, 1500);
-  } catch (e) {
-    log('クリップボードへのコピーに失敗: ' + (e as Error).message);
-  }
-});
-
-function setStatus(text: string, cls: string): void {
-  statusEl.textContent = text;
-  statusEl.className = cls;
-}
-
-function refreshUi(): void {
+export function refreshUi(): void {
   const connected = MovSerial.isConnected();
   connectBtn.hidden = connected;
   forgetBtn.hidden = !connected;
   helloBtn.hidden = !connected;
   setStatus(connected ? '接続済み（許可済み）' : '未接続', connected ? 'status-connected' : 'status-none');
+  onChangeCallback?.();
 }
 
-async function tryAutoConnect(): Promise<void> {
+export async function tryAutoConnect(): Promise<void> {
   if (!MovSerial.isSupported()) {
     setStatus('このブラウザはWeb Serial APIに対応していません（Chrome/Edgeを使ってください）', 'status-error');
     connectBtn.disabled = true;
@@ -98,5 +74,3 @@ helloBtn.addEventListener('click', async () => {
   }
   helloBtn.disabled = false;
 });
-
-tryAutoConnect();
