@@ -94,6 +94,7 @@ export async function loadImagePool(): Promise<void> {
   loadPoolBtn.disabled = true;
   try {
     poolStatusEl.textContent = 'プール一覧を取得しています...';
+    await refreshStorageInfo();
     const filenames = await listImages();
     const presets = appState.imagesData ?? (await getPresets());
 

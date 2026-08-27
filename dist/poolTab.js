@@ -86,6 +86,7 @@ export async function loadImagePool() {
     loadPoolBtn.disabled = true;
     try {
         poolStatusEl.textContent = 'プール一覧を取得しています...';
+        await refreshStorageInfo();
         const filenames = await listImages();
         const presets = appState.imagesData ?? (await getPresets());
         // 各画像がどのセットから参照されているかを集計（使用中バッジ用）
