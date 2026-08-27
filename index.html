@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>movdice 接続実験</title>
+<style>
+  body { font-family: sans-serif; max-width: 480px; margin: 2rem auto; padding: 0 1rem; }
+  #status { padding: 0.75rem; border-radius: 6px; margin: 1rem 0; }
+  .status-none { background: #eee; }
+  .status-connected { background: #d4edda; color: #155724; }
+  .status-error { background: #f8d7da; color: #721c24; }
+  button { padding: 0.5rem 1rem; margin-right: 0.5rem; }
+  #log { font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; background: #f5f5f5; padding: 0.5rem; height: 200px; overflow-y: auto; }
+</style>
+</head>
+<body>
+<h1>movdice 接続実験</h1>
+<p>ESP32との接続だけを試す実験用ページ。Chrome/Edgeでのみ動作します。</p>
+<p><a href="./about.html">このツールについて（概要・技術スタック）</a></p>
+
+<div id="status" class="status-none">未接続</div>
+
+<button id="connectBtn">ESP32に接続</button>
+<button id="forgetBtn" disabled>アクセスを取り消す</button>
+
+<h2>ログ</h2>
+<div id="log"></div>
+
+<script>
+const USB_VENDOR_ID = 0x303A;  // Espressif
+const USB_PRODUCT_ID = 0x1001; // ESP32-C6 USB Serial/JTAG
+
+let port = null;
+
+const statusEl = document.getElementById('status');
+const connectBtn = document.getElementById('connectBtn');
+const forgetBtn = document.getElementById('forgetBtn');
+const logEl = document.getElementById('log');
+
+function log(msg) {
+  const time = new Date().toLocaleTimeString();
+  logEl.textContent += `[${time}] ${msg}\n`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function setStatus(text, cls) {
+  statusEl.textContent = text;
+  statusEl.className = cls;
+}
+
+async function tryAutoConnect() {
+  if (!('serial' in navigator)) {
+    setStatus('このブラウザはWeb Serial APIに対応していません（Chrome/Edgeを使ってください）', 'status-error');
+    connectBtn.disabled = true;
+    return;
+  }
+  const ports = await navigator.serial.getPorts();
+  const found = ports.find(p => {
+    const info = p.getInfo();
+    return info.usbVendorId === USB_VENDOR_ID && info.usbProductId === USB_PRODUCT_ID;
+  });
+  if (found) {
+    log('許可済みデバイスを検出。自動接続します。');
+    await connectToPort(found);
+  } else {
+    log('許可済みデバイスはありません。「ESP32に接続」を押してください。');
+  }
+}
+
+async function connectToPort(p) {
+  try {
+    await p.open({ baudRate: 115200 });
+    port = p;
+    setStatus('接続済み（許可済み）', 'status-connected');
+    forgetBtn.disabled = false;
+    log('ポートをopenしました。');
+  } catch (e) {
+    setStatus('接続エラー: ' + e.message, 'status-error');
+    log('open失敗: ' + e.message);
+  }
+}
+
+connectBtn.addEventListener('click', async () => {
+  try {
+    const p = await navigator.serial.requestPort({
+      filters: [{ usbVendorId: USB_VENDOR_ID, usbProductId: USB_PRODUCT_ID }]
+    });
+    log('デバイスが選択されました。');
+    await connectToPort(p);
+  } catch (e) {
+    log('選択キャンセルまたはエラー: ' + e.message);
+  }
+});
+
+forgetBtn.addEventListener('click', async () => {
+  if (!port) return;
+  try {
+    if (port.readable || port.writable) {
+      await port.close();
+    }
+  } catch (e) {
+    log('close時エラー: ' + e.message);
+  }
+  await port.forget();
+  log('アクセスを取り消しました。');
+  port = null;
+  forgetBtn.disabled = true;
+  setStatus('未接続', 'status-none');
+});
+
+tryAutoConnect();
+</script>
+</body>
+</html>
