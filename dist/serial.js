@@ -38,8 +38,10 @@ export const MovSerial = (() => {
             try {
                 while (true) {
                     const { value, done } = await reader.read();
-                    if (done)
+                    if (done) {
+                        dlog('read loop: ストリームが閉じられました(done)');
                         break;
+                    }
                     if (value) {
                         for (const b of value)
                             rxBuffer.push(b);
@@ -47,9 +49,12 @@ export const MovSerial = (() => {
                 }
             }
             catch (e) {
-                // ポートが閉じられた場合など。呼び出し側でconnectedを見て判断する。
+                // ポートが閉じられた場合など。ESP32側のクラッシュダンプ等が残っていないか確認するため、
+                // rxBufferの中身をログに出す。
+                dlog('read loop error: ' + e.message);
             }
             finally {
+                dlog('read loop終了時点のrxBuffer内容: ' + JSON.stringify(bytesToString(rxBuffer)));
                 try {
                     reader?.releaseLock();
                 }
