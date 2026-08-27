@@ -236,5 +236,6 @@ export const MovSerial = (() => {
     writeBytes,
     writeBytesChunked,
     readExactBytes,
+    dlog,
   };
 })();
