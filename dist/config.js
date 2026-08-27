@@ -24,6 +24,8 @@ const testUploadBtn = document.getElementById('testUploadBtn');
 const loadPoolBtn = document.getElementById('loadPoolBtn');
 const poolStatusEl = document.getElementById('poolStatus');
 const poolListEl = document.getElementById('poolList');
+const newSetNameInput = document.getElementById('newSetName');
+const addSetBtn = document.getElementById('addSetBtn');
 buildVersionEl.textContent = 'hash: ' + BUILD_VERSION;
 function formatBytes(n) {
     return (n / 1024).toFixed(1) + ' KB';
@@ -95,6 +97,8 @@ function refreshUi() {
     loadPoolBtn.disabled = !connected;
     testSizeInput.disabled = !connected;
     testUploadBtn.disabled = !connected;
+    newSetNameInput.disabled = !connected;
+    addSetBtn.disabled = !connected;
     setStatus(connected ? '接続済み（許可済み）' : '未接続', connected ? 'status-connected' : 'status-none');
 }
 testUploadBtn.addEventListener('click', async () => {
@@ -192,21 +196,32 @@ forgetBtn.addEventListener('click', async () => {
 let currentImagesData = null;
 let currentCache = new Map();
 function renderSets(imagesData, cache, callbacks = {}) {
-    const { onRemoveFromSet, onSetPrimary, onFreqChange, onAddToSet } = callbacks;
+    const { onRemoveFromSet, onSetPrimary, onFreqChange, onAddToSet, onDeleteSet } = callbacks;
     setsEl.innerHTML = '';
     for (const setName of Object.keys(imagesData.sets)) {
         const section = document.createElement('div');
         section.className = 'set-section';
+        const isEmpty = Object.keys(imagesData.sets[setName]).length === 0;
         const heading = document.createElement('h3');
         const isPrimary = setName === imagesData.primary;
         heading.textContent = setName + (isPrimary ? '（primary） ' : ' ');
-        if (!isPrimary && onSetPrimary) {
+        // 画像が1枚もないセットをprimaryにできてしまうと、動作時にエラーになるため選ばせない
+        if (!isPrimary && !isEmpty && onSetPrimary) {
             const primaryBtn = document.createElement('button');
             primaryBtn.textContent = 'primaryにする';
             primaryBtn.style.fontSize = '0.7rem';
             primaryBtn.style.padding = '0.15rem 0.5rem';
             primaryBtn.addEventListener('click', () => onSetPrimary(setName));
             heading.appendChild(primaryBtn);
+        }
+        // primaryのセットは削除させない（primaryが不在になる状態を防ぐ）
+        if (!isPrimary && onDeleteSet) {
+            const deleteSetBtn = document.createElement('button');
+            deleteSetBtn.textContent = 'このキャラを削除';
+            deleteSetBtn.style.fontSize = '0.7rem';
+            deleteSetBtn.style.padding = '0.15rem 0.5rem';
+            deleteSetBtn.addEventListener('click', () => onDeleteSet(setName));
+            heading.appendChild(deleteSetBtn);
         }
         section.appendChild(heading);
         const row = document.createElement('div');
@@ -315,6 +330,7 @@ function rerenderSetsLocal() {
         onSetPrimary: handleSetPrimary,
         onFreqChange: handleFreqChange,
         onAddToSet: handleAddToSet,
+        onDeleteSet: handleDeleteSet,
     });
 }
 async function loadWithNewProtocol() {
@@ -348,6 +364,26 @@ async function loadWithNewProtocol() {
     }
     loadNewBtn.disabled = false;
 }
+// 新しいキャラ(セット)を追加する（画像は空の状態で作成。ローカル編集、未保存）
+addSetBtn.addEventListener('click', () => {
+    if (!currentImagesData) {
+        log('先に画像一覧を読み込んでください。');
+        return;
+    }
+    const name = newSetNameInput.value.trim();
+    if (!name) {
+        log('キャラ名を入力してください。');
+        return;
+    }
+    if (currentImagesData.sets[name]) {
+        log(`「${name}」は既に存在します。`);
+        return;
+    }
+    currentImagesData.sets[name] = {};
+    newSetNameInput.value = '';
+    log(`「${name}」を追加しました（画像はまだありません。下の一覧で画像を追加してください。未保存）。`);
+    rerenderSetsLocal();
+});
 // プレビュー画面の「このセットから外す」操作: プール(img/)の実ファイルには触れず、
 // そのセットの選択情報(images.jsonのsets)からキーを外すだけ（ローカル編集、未保存）。
 function handleRemoveFromSet(setName, filename) {
@@ -355,6 +391,16 @@ function handleRemoveFromSet(setName, filename) {
         return;
     delete currentImagesData.sets[setName][filename];
     log(`「${setName}」から ${filename} を外しました（未保存。「設定を反映」で書き込まれます）。`);
+    rerenderSetsLocal();
+}
+// キャラ(セット)自体を削除する。primaryは削除できない（呼び出し元でボタン自体を出していない）。
+function handleDeleteSet(setName) {
+    if (!currentImagesData)
+        return;
+    if (!confirm(`「${setName}」を削除しますか？（そのキャラの設定がすべて消えます。画像自体は削除されません）`))
+        return;
+    delete currentImagesData.sets[setName];
+    log(`「${setName}」を削除しました（未保存。「設定を反映」で書き込まれます）。`);
     rerenderSetsLocal();
 }
 // 起動時に最初に表示するセットを切り替える（ローカル編集、未保存）

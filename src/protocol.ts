@@ -51,10 +51,15 @@ async function readMessage(): Promise<ConfigResponse> {
   return { meta, body };
 }
 
-export async function sendCommand(
+// 複数のコマンドがほぼ同時に呼ばれると、rxBufferの読み取りが競合し、
+// 別コマンドの応答を誤って消費してプロトコルが壊れる。1本のシリアル接続を
+// 使い回している以上、通信は常に直列化する（前のコマンドの完了を待ってから次を実行する）。
+let commandQueue: Promise<unknown> = Promise.resolve();
+
+async function sendCommandRaw(
   cmd: string,
-  params: Record<string, unknown> = {},
-  body: Uint8Array = new Uint8Array(0)
+  params: Record<string, unknown>,
+  body: Uint8Array
 ): Promise<ConfigResponse> {
   await writeMessage(cmd, params, body);
   const res = await readMessage();
@@ -62,6 +67,20 @@ export async function sendCommand(
     throw new Error('ESP32側エラー: ' + (res.meta.error ?? '(詳細不明)'));
   }
   return res;
+}
+
+export function sendCommand(
+  cmd: string,
+  params: Record<string, unknown> = {},
+  body: Uint8Array = new Uint8Array(0)
+): Promise<ConfigResponse> {
+  const result = commandQueue.then(
+    () => sendCommandRaw(cmd, params, body),
+    () => sendCommandRaw(cmd, params, body)
+  );
+  // 直前のコマンドが失敗していても、キュー自体は途切れさせずに次へつなげる
+  commandQueue = result.catch(() => undefined);
+  return result;
 }
 
 export async function hello(): Promise<ConfigMeta> {

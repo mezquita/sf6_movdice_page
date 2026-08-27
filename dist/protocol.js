@@ -33,13 +33,23 @@ async function readMessage() {
     const body = bodyLen > 0 ? new Uint8Array(await MovSerial.readExactBytes(bodyLen)) : new Uint8Array(0);
     return { meta, body };
 }
-export async function sendCommand(cmd, params = {}, body = new Uint8Array(0)) {
+// 複数のコマンドがほぼ同時に呼ばれると、rxBufferの読み取りが競合し、
+// 別コマンドの応答を誤って消費してプロトコルが壊れる。1本のシリアル接続を
+// 使い回している以上、通信は常に直列化する（前のコマンドの完了を待ってから次を実行する）。
+let commandQueue = Promise.resolve();
+async function sendCommandRaw(cmd, params, body) {
     await writeMessage(cmd, params, body);
     const res = await readMessage();
     if (!res.meta.ok) {
         throw new Error('ESP32側エラー: ' + (res.meta.error ?? '(詳細不明)'));
     }
     return res;
+}
+export function sendCommand(cmd, params = {}, body = new Uint8Array(0)) {
+    const result = commandQueue.then(() => sendCommandRaw(cmd, params, body), () => sendCommandRaw(cmd, params, body));
+    // 直前のコマンドが失敗していても、キュー自体は途切れさせずに次へつなげる
+    commandQueue = result.catch(() => undefined);
+    return result;
 }
 export async function hello() {
     const res = await sendCommand('hello');
