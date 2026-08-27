@@ -74,6 +74,7 @@ uploadBtn.addEventListener('click', async () => {
         uploadFileInput.value = '';
         uploadFilenameInput.value = '';
         await refreshStorageInfo();
+        await loadImagePool();
     }
     catch (e) {
         log('アップロード失敗: ' + e.message);

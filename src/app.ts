@@ -8,7 +8,7 @@ const buildVersionEl = document.getElementById('buildVersion') as HTMLParagraphE
 const logEl = document.getElementById('log') as HTMLDivElement;
 const copyLogBtn = document.getElementById('copyLogBtn') as HTMLButtonElement;
 
-buildVersionEl.textContent = 'hash: ' + BUILD_VERSION;
+buildVersionEl.textContent = 'build: ' + BUILD_VERSION;
 
 copyLogBtn.addEventListener('click', async () => {
   try {

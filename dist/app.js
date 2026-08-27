@@ -6,7 +6,7 @@ import * as charTab from './charTab.js';
 const buildVersionEl = document.getElementById('buildVersion');
 const logEl = document.getElementById('log');
 const copyLogBtn = document.getElementById('copyLogBtn');
-buildVersionEl.textContent = 'hash: ' + BUILD_VERSION;
+buildVersionEl.textContent = 'build: ' + BUILD_VERSION;
 copyLogBtn.addEventListener('click', async () => {
     try {
         await navigator.clipboard.writeText(logEl.textContent || '');

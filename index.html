@@ -41,11 +41,9 @@
   .uploadRow input, .uploadRow button { margin: 0; width: auto; }
   .uploadRow input[type="text"] { width: 180px; }
   .usedBy { font-size: 0.7rem; color: #c0392b; text-align: center; margin-top: 0.2rem; }
-  #storageInfo { margin: 1rem 0; padding: 0.6rem 0.75rem; background: var(--pico-card-background-color); border-radius: 6px; font-size: 0.85rem; }
-  #storageBar { height: 8px; background: var(--pico-muted-border-color); border-radius: 4px; overflow: hidden; margin-top: 0.4rem; }
-  #storageBarFill { height: 100%; background: var(--pico-primary); }
-  #storageBarFill.warn { background: #e0a800; }
-  #storageBarFill.danger { background: #d9534f; }
+  .poolToolbar { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+  .poolToolbar button { margin: 0; width: auto; }
+  #storageInfo { font-size: 0.85rem; color: var(--pico-muted-color); }
   .toolbar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 1rem 0; }
   .toolbar button { margin: 0; width: auto; }
   #saveStatus { color: #155724; font-weight: bold; }
@@ -87,9 +85,11 @@
 </div>
 
 <div id="tabPool" class="tab-panel">
-  <button id="loadPoolBtn" disabled>画像一覧を読み込む</button>
+  <div class="poolToolbar">
+    <button id="loadPoolBtn" disabled>画像一覧を読み込む</button>
+    <span id="storageInfo"></span>
+  </div>
   <div id="poolStatus"></div>
-  <div id="storageInfo"></div>
 
   <div id="uploadBox">
     <strong>画像アップロード</strong>
@@ -165,6 +165,13 @@
     <li>接続エラーが出る・再起動が不安定になる場合は、リセットとPWR(BOOT)ボタンを押すタイミングを見直してみてください</li>
     <li>Thonny等、他のツールでESP32に接続したままだと、ブラウザからは接続できません</li>
   </ul>
+
+  <h3>デフォルト画像セット</h3>
+  <p class="hint">
+    画像プールから完全に削除してしまうと元には戻せません。念のため、初期状態で入っている画像一式を配布しています。
+    <br>
+    <a href="./default_images.zip" download>default_images.zip をダウンロード</a>
+  </p>
 </div>
 
 <h2>ログ <button id="copyLogBtn" style="font-size: 0.7rem; padding: 0.2rem 0.6rem;">コピー</button></h2>
