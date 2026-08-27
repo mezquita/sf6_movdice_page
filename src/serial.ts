@@ -173,6 +173,9 @@ export const MovSerial = (() => {
     const start = Date.now();
     while (rxBuffer.length < n) {
       if (Date.now() - start > timeoutMs) {
+        // rxBufferの中身をテキストとして出す（プロトコルが想定するバイナリではなく、
+        // ESP32側が吐いたPythonのトレースバック等のテキストが混入していないか確認するため）
+        dlog('タイムアウト時のrxBuffer内容（先頭2000文字）: ' + JSON.stringify(bytesToString(rxBuffer).slice(0, 2000)));
         throw new Error(`タイムアウト: ${n}バイト読めませんでした（${rxBuffer.length}バイトのみ受信）`);
       }
       await new Promise((r) => setTimeout(r, 20));
