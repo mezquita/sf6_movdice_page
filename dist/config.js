@@ -1,6 +1,6 @@
 import { MovSerial } from './serial.js';
 import { base64ToBytes, decodeRleToRgba, decodeRawToRgba, rgbaToDataUrl, pngFileToRgb565Rle } from './imageDecode.js';
-import { hello, listImages, getImage, getPresets, savePresets, uploadImage, getStorageInfo } from './protocol.js';
+import { hello, listImages, getImage, getPresets, savePresets, uploadImage, deleteImage, getStorageInfo } from './protocol.js';
 import { BUILD_VERSION } from './version.js';
 const statusEl = document.getElementById('status');
 const connectBtn = document.getElementById('connectBtn');
@@ -19,6 +19,9 @@ const buildVersionEl = document.getElementById('buildVersion');
 const storageInfoEl = document.getElementById('storageInfo');
 const testSizeInput = document.getElementById('testSize');
 const testUploadBtn = document.getElementById('testUploadBtn');
+const loadPoolBtn = document.getElementById('loadPoolBtn');
+const poolStatusEl = document.getElementById('poolStatus');
+const poolListEl = document.getElementById('poolList');
 buildVersionEl.textContent = 'hash: ' + BUILD_VERSION;
 function formatBytes(n) {
     return (n / 1024).toFixed(1) + ' KB';
@@ -86,6 +89,7 @@ function refreshUi() {
     uploadFileInput.disabled = !connected;
     uploadFilenameInput.disabled = !connected;
     uploadBtn.disabled = !connected;
+    loadPoolBtn.disabled = !connected;
     testSizeInput.disabled = !connected;
     testUploadBtn.disabled = !connected;
     setStatus(connected ? '接続済み（許可済み）' : '未接続', connected ? 'status-connected' : 'status-none');
@@ -176,13 +180,25 @@ async function fetchRawFileBase64(filename) {
     const code = `import binascii\nprint(binascii.b2a_base64(open('img/${safe}','rb').read()).decode())`;
     return await MovSerial.execRaw(code);
 }
-function renderSets(imagesData, cache, onRemoveFromSet) {
+function renderSets(imagesData, cache, onRemoveFromSet, onSetPrimary) {
     setsEl.innerHTML = '';
     for (const setName of Object.keys(imagesData.sets)) {
         const section = document.createElement('div');
         section.className = 'set-section';
         const heading = document.createElement('h3');
-        heading.textContent = setName + (setName === imagesData.primary ? '（primary）' : '');
+        const isPrimary = setName === imagesData.primary;
+        heading.textContent = setName + (isPrimary ? '（primary） ' : ' ');
+        if (isPrimary) {
+            // 見出しテキストのみで表現済み。ボタンは出さない。
+        }
+        else if (onSetPrimary) {
+            const primaryBtn = document.createElement('button');
+            primaryBtn.textContent = 'primaryにする';
+            primaryBtn.style.fontSize = '0.7rem';
+            primaryBtn.style.padding = '0.15rem 0.5rem';
+            primaryBtn.addEventListener('click', () => onSetPrimary(setName));
+            heading.appendChild(primaryBtn);
+        }
         section.appendChild(heading);
         const row = document.createElement('div');
         row.className = 'thumb-row';
@@ -272,7 +288,7 @@ async function loadWithNewProtocol() {
             done++;
             log(`${filename} 取得完了 (${bytes.length} bytes)`);
         }
-        renderSets(imagesData, cache, handleRemoveFromSet);
+        renderSets(imagesData, cache, handleRemoveFromSet, handleSetPrimary);
         setLoadStatus(`完了（${total}枚、新プロトコル）`);
         await refreshStorageInfo();
     }
@@ -287,12 +303,29 @@ async function loadWithNewProtocol() {
 async function handleRemoveFromSet(setName, filename) {
     if (!currentImagesData)
         return;
-    if (!confirm(`「${setName}」から ${filename} を外しますか？（画像自体は削除されません）`))
-        return;
     try {
         delete currentImagesData.sets[setName][filename];
         const result = await savePresets(currentImagesData);
         log(`「${setName}」から ${filename} を外しました。`);
+        if (result.warning) {
+            log('警告: ' + result.warning);
+        }
+        await loadWithNewProtocol();
+    }
+    catch (e) {
+        log('保存失敗: ' + e.message);
+    }
+}
+// 起動時に最初に表示するセットを切り替える
+async function handleSetPrimary(setName) {
+    if (!currentImagesData)
+        return;
+    if (!confirm(`「${setName}」をprimary（起動時に最初に表示するセット）にしますか？`))
+        return;
+    try {
+        currentImagesData.primary = setName;
+        const result = await savePresets(currentImagesData);
+        log(`primaryを「${setName}」に変更しました。`);
         if (result.warning) {
             log('警告: ' + result.warning);
         }
@@ -342,4 +375,78 @@ uploadBtn.addEventListener('click', async () => {
     }
     uploadBtn.disabled = false;
 });
+// --- 画像プール管理（実ファイルの完全削除。プレビュー画面の「このセットから外す」とは別物） ---
+async function loadImagePool() {
+    loadPoolBtn.disabled = true;
+    try {
+        poolStatusEl.textContent = 'プール一覧を取得しています...';
+        const filenames = await listImages();
+        const presets = currentImagesData ?? (await getPresets());
+        // 各画像がどのセットから参照されているかを集計（使用中バッジ用）
+        const usageMap = new Map();
+        for (const setName of Object.keys(presets.sets)) {
+            for (const filename of Object.keys(presets.sets[setName])) {
+                if (!usageMap.has(filename))
+                    usageMap.set(filename, []);
+                usageMap.get(filename).push(setName);
+            }
+        }
+        poolListEl.innerHTML = '';
+        const total = filenames.length;
+        let done = 0;
+        for (const filename of filenames) {
+            poolStatusEl.textContent = `画像を取得中... (${done}/${total}) ${filename}`;
+            const bytes = await getImage(filename);
+            const rgba = presets.use_rle ? decodeRleToRgba(bytes) : decodeRawToRgba(bytes);
+            const dataUrl = rgbaToDataUrl(rgba);
+            done++;
+            const wrap = document.createElement('div');
+            wrap.className = 'thumb';
+            const img = document.createElement('img');
+            img.src = dataUrl;
+            img.alt = filename;
+            const caption = document.createElement('div');
+            caption.className = 'caption';
+            caption.textContent = filename.replace(/\.raw$/, '');
+            wrap.appendChild(img);
+            wrap.appendChild(caption);
+            const usedBy = usageMap.get(filename) || [];
+            if (usedBy.length > 0) {
+                const badge = document.createElement('div');
+                badge.className = 'usedBy';
+                badge.textContent = `使用中: ${usedBy.join(', ')}`;
+                wrap.appendChild(badge);
+            }
+            const delBtn = document.createElement('button');
+            delBtn.className = 'delBtn';
+            delBtn.textContent = '完全に削除';
+            delBtn.addEventListener('click', () => handlePoolDelete(filename, usedBy));
+            wrap.appendChild(delBtn);
+            poolListEl.appendChild(wrap);
+        }
+        poolStatusEl.textContent = `完了（${total}枚）`;
+    }
+    catch (e) {
+        poolStatusEl.textContent = 'エラー: ' + e.message;
+        log('プール読み込み失敗: ' + e.message);
+    }
+    loadPoolBtn.disabled = false;
+}
+async function handlePoolDelete(filename, usedBy) {
+    const warning = usedBy.length > 0
+        ? `${filename} は次のセットから使用中です: ${usedBy.join(', ')}\n削除すると、それらのセットの表示も壊れます。`
+        : `${filename} はどのセットからも使われていません。`;
+    if (!confirm(`${warning}\n\n本当に完全に削除しますか？（元に戻せません）`))
+        return;
+    try {
+        await deleteImage(filename);
+        log(`${filename} をプールから完全に削除しました。`);
+        await refreshStorageInfo();
+        await loadImagePool();
+    }
+    catch (e) {
+        log('削除失敗: ' + e.message);
+    }
+}
+loadPoolBtn.addEventListener('click', loadImagePool);
 tryAutoConnect();
