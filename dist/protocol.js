@@ -22,7 +22,7 @@ async function writeMessage(cmd, params = {}, body = new Uint8Array(0)) {
     await MovSerial.writeBytes(metaBytes);
     await MovSerial.writeBytes(u32ToBytes(body.length));
     if (body.length > 0) {
-        await MovSerial.writeBytes(Array.from(body));
+        await MovSerial.writeBytesChunked(Array.from(body));
     }
 }
 async function readMessage() {

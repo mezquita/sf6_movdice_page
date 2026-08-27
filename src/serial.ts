@@ -118,6 +118,17 @@ export const MovSerial = (() => {
     }
   }
 
+  // ESP32側のUSB受信バッファが小さく、大きなデータを一括送信するとオーバーフローしうるため、
+  // チャンクに分割し、チャンク間にわずかな待機を入れて送る（主にupload_image用）。
+  async function writeBytesChunked(bytes: number[], chunkSize = 256, delayMs = 5): Promise<void> {
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      await writeBytes(bytes.slice(i, i + chunkSize));
+      if (i + chunkSize < bytes.length) {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+  }
+
   function bytesToString(bytes: number[]): string {
     return new TextDecoder().decode(new Uint8Array(bytes));
   }
@@ -217,6 +228,7 @@ export const MovSerial = (() => {
     execRaw,
     setDebugLogger,
     writeBytes,
+    writeBytesChunked,
     readExactBytes,
   };
 })();
