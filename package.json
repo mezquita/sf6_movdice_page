@@ -1,0 +1,12 @@
+{
+  "name": "sf6_movdice_page",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "@types/w3c-web-serial": "^1.0.8"
+  }
+}

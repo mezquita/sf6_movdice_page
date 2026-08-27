@@ -32,8 +32,20 @@ ESP32-C6搭載の小型LCD表示機「movdice」に対して、USB経由（[Web 
 | 項目 | 内容 |
 |---|---|
 | 通信 | Web Serial API |
-| 画像変換 | ブラウザ内JavaScript（PNG→RGB565変換→RLE圧縮） |
+| 画像変換 | ブラウザ内TypeScript（PNG→RGB565変換→RLE圧縮） |
 | ESP32側ファームウェア | MicroPython |
+
+## ビルド
+
+`src/*.ts` をTypeScriptで書き、`tsc`でトランスパイルするだけ（バンドラは使わない）。
+生成された `dist/*.js` はコミットに含めてそのままGitHub Pagesで配信する。
+
+```
+npm install
+npm run build   # tsc実行、dist/以下を更新
+```
+
+HTML側は `<script type="module">` で `./dist/serial.js` を読み込む。
 
 ## リポジトリの位置づけ
 

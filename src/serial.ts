@@ -4,41 +4,46 @@
 const USB_VENDOR_ID = 0x303A;  // Espressif
 const USB_PRODUCT_ID = 0x1001; // ESP32-C6 USB Serial/JTAG
 
-export const MovSerial = (() => {
-  let port = null;
-  let reader = null;
-  let readLoopPromise = null;
-  let rxBuffer = [];
-  let debugLog = null;
+export type DebugLogger = (msg: string) => void;
 
-  function setDebugLogger(fn) {
+export const MovSerial = (() => {
+  let port: SerialPort | null = null;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+  let readLoopPromise: Promise<void> | null = null;
+  let rxBuffer: number[] = [];
+  let debugLog: DebugLogger | null = null;
+
+  function setDebugLogger(fn: DebugLogger): void {
     debugLog = fn;
   }
 
-  function dlog(msg) {
-    if (debugLog) debugLog('[serial.js] ' + msg);
+  function dlog(msg: string): void {
+    if (debugLog) debugLog('[serial.ts] ' + msg);
   }
 
-  function isSupported() {
+  function isSupported(): boolean {
     return 'serial' in navigator;
   }
 
-  async function getRememberedPort() {
+  async function getRememberedPort(): Promise<SerialPort | null> {
     const ports = await navigator.serial.getPorts();
-    return ports.find(p => {
-      const info = p.getInfo();
-      return info.usbVendorId === USB_VENDOR_ID && info.usbProductId === USB_PRODUCT_ID;
-    }) || null;
+    return (
+      ports.find((p) => {
+        const info = p.getInfo();
+        return info.usbVendorId === USB_VENDOR_ID && info.usbProductId === USB_PRODUCT_ID;
+      }) || null
+    );
   }
 
-  async function requestNewPort() {
+  async function requestNewPort(): Promise<SerialPort> {
     return navigator.serial.requestPort({
-      filters: [{ usbVendorId: USB_VENDOR_ID, usbProductId: USB_PRODUCT_ID }]
+      filters: [{ usbVendorId: USB_VENDOR_ID, usbProductId: USB_PRODUCT_ID }],
     });
   }
 
-  function startReadLoop() {
+  function startReadLoop(): void {
     readLoopPromise = (async () => {
+      if (!port || !port.readable) return;
       reader = port.readable.getReader();
       try {
         while (true) {
@@ -51,41 +56,60 @@ export const MovSerial = (() => {
       } catch (e) {
         // ポートが閉じられた場合など。呼び出し側でconnectedを見て判断する。
       } finally {
-        try { reader.releaseLock(); } catch (e) {}
+        try {
+          reader?.releaseLock();
+        } catch (e) {
+          // ignore
+        }
         reader = null;
       }
     })();
   }
 
-  async function connect(p) {
+  async function connect(p: SerialPort): Promise<void> {
     await p.open({ baudRate: 115200 });
     port = p;
     rxBuffer = [];
     startReadLoop();
   }
 
-  function isConnected() {
+  function isConnected(): boolean {
     return port !== null;
   }
 
-  async function disconnectAndForget() {
+  async function disconnectAndForget(): Promise<void> {
     if (reader) {
-      try { await reader.cancel(); } catch (e) {}
+      try {
+        await reader.cancel();
+      } catch (e) {
+        // ignore
+      }
     }
     if (readLoopPromise) {
-      try { await readLoopPromise; } catch (e) {}
+      try {
+        await readLoopPromise;
+      } catch (e) {
+        // ignore
+      }
     }
     if (port) {
       try {
         if (port.readable || port.writable) await port.close();
-      } catch (e) {}
-      try { await port.forget(); } catch (e) {}
+      } catch (e) {
+        // ignore
+      }
+      try {
+        await port.forget();
+      } catch (e) {
+        // ignore
+      }
       port = null;
     }
     rxBuffer = [];
   }
 
-  async function writeBytes(bytes) {
+  async function writeBytes(bytes: number[]): Promise<void> {
+    if (!port || !port.writable) throw new Error('ポートが接続されていません');
     const w = port.writable.getWriter();
     try {
       await w.write(new Uint8Array(bytes));
@@ -94,13 +118,12 @@ export const MovSerial = (() => {
     }
   }
 
-  function bytesToString(bytes) {
+  function bytesToString(bytes: number[]): string {
     return new TextDecoder().decode(new Uint8Array(bytes));
   }
 
-  function findPattern(buf, pattern) {
-    outer:
-    for (let i = 0; i <= buf.length - pattern.length; i++) {
+  function findPattern(buf: number[], pattern: number[]): number {
+    outer: for (let i = 0; i <= buf.length - pattern.length; i++) {
       for (let j = 0; j < pattern.length; j++) {
         if (buf[i + j] !== pattern[j]) continue outer;
       }
@@ -109,7 +132,7 @@ export const MovSerial = (() => {
     return -1;
   }
 
-  async function waitForBytes(patternStr, timeoutMs = 5000) {
+  async function waitForBytes(patternStr: string, timeoutMs = 5000): Promise<number> {
     const pattern = Array.from(new TextEncoder().encode(patternStr));
     const start = Date.now();
     while (true) {
@@ -118,21 +141,21 @@ export const MovSerial = (() => {
       if (Date.now() - start > timeoutMs) {
         throw new Error(`タイムアウト: "${patternStr}" が来ませんでした`);
       }
-      await new Promise(r => setTimeout(r, 20));
+      await new Promise((r) => setTimeout(r, 20));
     }
   }
 
-  function consumeUpTo(endIndex) {
+  function consumeUpTo(endIndex: number): number[] {
     const consumed = rxBuffer.slice(0, endIndex);
     rxBuffer = rxBuffer.slice(endIndex);
     return consumed;
   }
 
   // MicroPythonのRaw REPLに入る（Thonny/mpremote等と同じ仕組み）
-  async function enterRawRepl() {
+  async function enterRawRepl(): Promise<void> {
     rxBuffer = [];
     await writeBytes([0x03, 0x03]); // Ctrl-C x2: 実行中の処理を止める
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 200));
     dlog('Ctrl-C後・破棄前のバッファ: ' + JSON.stringify(bytesToString(rxBuffer)));
     rxBuffer = [];
     await writeBytes([0x01]); // Ctrl-A: raw REPLへ
@@ -141,13 +164,13 @@ export const MovSerial = (() => {
     consumeUpTo(idx); // プロンプトまでを消費。以降に届いているデータは保持する
   }
 
-  async function exitRawRepl() {
+  async function exitRawRepl(): Promise<void> {
     await writeBytes([0x02]); // Ctrl-B: 通常REPLへ戻る
     rxBuffer = [];
   }
 
   // Raw REPL内でPythonコードを1回実行し、標準出力の文字列を返す
-  async function execRaw(code, timeoutMs = 8000) {
+  async function execRaw(code: string, timeoutMs = 8000): Promise<string> {
     rxBuffer = [];
     await writeBytes(Array.from(new TextEncoder().encode(code)));
     await writeBytes([0x04]); // Ctrl-D: 実行
