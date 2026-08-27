@@ -67,3 +67,56 @@ export function rgbaToDataUrl(rgba) {
     ctx.putImageData(new ImageData(rgba, IMG_WIDTH, IMG_HEIGHT), 0, 0);
     return canvas.toDataURL('image/png');
 }
+// --- アップロード用: PNG(File/Blob) -> RGB565 -> RLE圧縮 ---
+// img_cvt.py の _image_to_rgb565 / _rle_encode と対応する処理（変換自体はブラウザ側で完結させる方針）
+function rgbaToRgb565Bytes(rgba) {
+    const pixelCount = IMG_WIDTH * IMG_HEIGHT;
+    const out = new Uint8Array(pixelCount * 2);
+    for (let i = 0; i < pixelCount; i++) {
+        const r = rgba[i * 4];
+        const g = rgba[i * 4 + 1];
+        const b = rgba[i * 4 + 2];
+        const rgb565 = ((r & 0xf8) << 8) | ((g & 0xfc) << 3) | (b >> 3);
+        out[i * 2] = rgb565 >> 8;
+        out[i * 2 + 1] = rgb565 & 0xff;
+    }
+    return out;
+}
+// img_cvt.pyの_rle_encodeと同じロジック（色2byte(big-endian) + (ラン長-1)1byte のトークン列）
+function rleEncode(buf) {
+    const out = [];
+    const n = buf.length;
+    let i = 0;
+    while (i < n) {
+        const hi = buf[i];
+        const lo = buf[i + 1];
+        let j = i + 2;
+        while (j < n && buf[j] === hi && buf[j + 1] === lo) {
+            j += 2;
+        }
+        let run = (j - i) / 2;
+        while (run > 0) {
+            const chunk = Math.min(run, 256);
+            out.push(hi, lo, chunk - 1);
+            run -= chunk;
+        }
+        i = j;
+    }
+    return new Uint8Array(out);
+}
+export async function pngFileToRgb565Rle(file) {
+    const bitmap = await createImageBitmap(file, {
+        resizeWidth: IMG_WIDTH,
+        resizeHeight: IMG_HEIGHT,
+        resizeQuality: 'high',
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = IMG_WIDTH;
+    canvas.height = IMG_HEIGHT;
+    const ctx = canvas.getContext('2d');
+    if (!ctx)
+        throw new Error('canvas 2d context を取得できません');
+    ctx.drawImage(bitmap, 0, 0, IMG_WIDTH, IMG_HEIGHT);
+    const imageData = ctx.getImageData(0, 0, IMG_WIDTH, IMG_HEIGHT);
+    return rleEncode(rgbaToRgb565Bytes(imageData.data));
+}

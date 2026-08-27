@@ -58,3 +58,9 @@ export async function getPresets() {
     const text = new TextDecoder().decode(res.body);
     return JSON.parse(text);
 }
+export async function uploadImage(filename, data) {
+    await sendCommand('upload_image', { filename }, data);
+}
+export async function deleteImage(filename) {
+    await sendCommand('delete_image', { filename });
+}

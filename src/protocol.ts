@@ -84,3 +84,11 @@ export async function getPresets(): Promise<ImagesJson> {
   const text = new TextDecoder().decode(res.body);
   return JSON.parse(text) as ImagesJson;
 }
+
+export async function uploadImage(filename: string, data: Uint8Array): Promise<void> {
+  await sendCommand('upload_image', { filename }, data);
+}
+
+export async function deleteImage(filename: string): Promise<void> {
+  await sendCommand('delete_image', { filename });
+}

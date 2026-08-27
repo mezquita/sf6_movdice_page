@@ -1,6 +1,7 @@
 import { MovSerial } from './serial.js';
-import { ImagesJson, base64ToBytes, decodeRleToRgba, decodeRawToRgba, rgbaToDataUrl } from './imageDecode.js';
-import { hello, listImages, getImage, getPresets } from './protocol.js';
+import { ImagesJson, base64ToBytes, decodeRleToRgba, decodeRawToRgba, rgbaToDataUrl, pngFileToRgb565Rle } from './imageDecode.js';
+import { hello, listImages, getImage, getPresets, uploadImage, deleteImage } from './protocol.js';
+import { BUILD_VERSION } from './version.js';
 
 const statusEl = document.getElementById('status') as HTMLDivElement;
 const connectBtn = document.getElementById('connectBtn') as HTMLButtonElement;
@@ -12,6 +13,12 @@ const loadStatusEl = document.getElementById('loadStatus') as HTMLDivElement;
 const setsEl = document.getElementById('sets') as HTMLDivElement;
 const logEl = document.getElementById('log') as HTMLDivElement;
 const copyLogBtn = document.getElementById('copyLogBtn') as HTMLButtonElement;
+const uploadFileInput = document.getElementById('uploadFile') as HTMLInputElement;
+const uploadFilenameInput = document.getElementById('uploadFilename') as HTMLInputElement;
+const uploadBtn = document.getElementById('uploadBtn') as HTMLButtonElement;
+const buildVersionEl = document.getElementById('buildVersion') as HTMLParagraphElement;
+
+buildVersionEl.textContent = 'hash: ' + BUILD_VERSION;
 
 function log(msg: string): void {
   const time = new Date().toLocaleTimeString();
@@ -49,6 +56,9 @@ function refreshUi(): void {
   loadBtn.disabled = !connected;
   helloBtn.disabled = !connected;
   loadNewBtn.disabled = !connected;
+  uploadFileInput.disabled = !connected;
+  uploadFilenameInput.disabled = !connected;
+  uploadBtn.disabled = !connected;
   setStatus(connected ? '接続済み（許可済み）' : '未接続', connected ? 'status-connected' : 'status-none');
 }
 
@@ -121,7 +131,7 @@ async function fetchRawFileBase64(filename: string): Promise<string> {
   return await MovSerial.execRaw(code);
 }
 
-function renderSets(imagesData: ImagesJson, cache: Map<string, string>): void {
+function renderSets(imagesData: ImagesJson, cache: Map<string, string>, onDelete?: (filename: string) => void): void {
   setsEl.innerHTML = '';
   for (const setName of Object.keys(imagesData.sets)) {
     const section = document.createElement('div');
@@ -147,6 +157,15 @@ function renderSets(imagesData: ImagesJson, cache: Map<string, string>): void {
 
       wrap.appendChild(img);
       wrap.appendChild(caption);
+
+      if (onDelete) {
+        const delBtn = document.createElement('button');
+        delBtn.className = 'delBtn';
+        delBtn.textContent = '削除';
+        delBtn.addEventListener('click', () => onDelete(filename));
+        wrap.appendChild(delBtn);
+      }
+
       row.appendChild(wrap);
     }
     section.appendChild(row);
@@ -197,7 +216,7 @@ loadBtn.addEventListener('click', async () => {
   loadBtn.disabled = false;
 });
 
-loadNewBtn.addEventListener('click', async () => {
+async function loadWithNewProtocol(): Promise<void> {
   loadNewBtn.disabled = true;
   try {
     setLoadStatus('新プロトコルでプリセットを取得しています...');
@@ -218,13 +237,54 @@ loadNewBtn.addEventListener('click', async () => {
       done++;
       log(`${filename} 取得完了 (${bytes.length} bytes)`);
     }
-    renderSets(imagesData, cache);
+    renderSets(imagesData, cache, handleDeleteClick);
     setLoadStatus(`完了（${total}枚、新プロトコル）`);
   } catch (e) {
     setLoadStatus('エラー: ' + (e as Error).message);
     log('読み込み失敗: ' + (e as Error).message);
   }
   loadNewBtn.disabled = false;
+}
+
+async function handleDeleteClick(filename: string): Promise<void> {
+  if (!confirm(`${filename} を削除しますか？`)) return;
+  try {
+    await deleteImage(filename);
+    log(`${filename} を削除しました。`);
+    await loadWithNewProtocol();
+  } catch (e) {
+    log('削除失敗: ' + (e as Error).message);
+  }
+}
+
+loadNewBtn.addEventListener('click', loadWithNewProtocol);
+
+uploadBtn.addEventListener('click', async () => {
+  const file = uploadFileInput.files?.[0];
+  if (!file) {
+    log('アップロードするPNGファイルを選択してください。');
+    return;
+  }
+  let filename = uploadFilenameInput.value.trim();
+  if (!filename) {
+    filename = file.name.replace(/\.png$/i, '') + '.raw';
+  }
+  if (!filename.endsWith('.raw')) {
+    filename += '.raw';
+  }
+  uploadBtn.disabled = true;
+  try {
+    log(`${file.name} を変換しています...`);
+    const rle = await pngFileToRgb565Rle(file);
+    log(`変換完了 (${rle.length} bytes)。アップロードします: ${filename}`);
+    await uploadImage(filename, rle);
+    log(`アップロード完了: ${filename}`);
+    uploadFileInput.value = '';
+    uploadFilenameInput.value = '';
+  } catch (e) {
+    log('アップロード失敗: ' + (e as Error).message);
+  }
+  uploadBtn.disabled = false;
 });
 
 tryAutoConnect();

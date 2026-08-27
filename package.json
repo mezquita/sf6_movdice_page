@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "build": "tsc"
+    "build": "node gen-version.js && tsc"
   },
   "devDependencies": {
     "typescript": "^5.5.4",

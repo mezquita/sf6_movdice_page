@@ -1,10 +1,14 @@
 import { MovSerial } from './serial.js';
+import { BUILD_VERSION } from './version.js';
 
 const statusEl = document.getElementById('status') as HTMLDivElement;
 const connectBtn = document.getElementById('connectBtn') as HTMLButtonElement;
 const forgetBtn = document.getElementById('forgetBtn') as HTMLButtonElement;
 const logEl = document.getElementById('log') as HTMLDivElement;
 const copyLogBtn = document.getElementById('copyLogBtn') as HTMLButtonElement;
+const buildVersionEl = document.getElementById('buildVersion') as HTMLParagraphElement;
+
+buildVersionEl.textContent = 'hash: ' + BUILD_VERSION;
 
 function log(msg: string): void {
   const time = new Date().toLocaleTimeString();
