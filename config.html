@@ -184,6 +184,7 @@ function rgbaToDataUrl(rgba) {
 
 async function fetchImagesJson() {
   const jsonStr = await MovSerial.execRaw("print(open('images.json').read())");
+  log('images.json raw: ' + JSON.stringify(jsonStr));
   return JSON.parse(jsonStr);
 }
 
